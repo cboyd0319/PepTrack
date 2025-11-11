@@ -8,6 +8,7 @@ import WelcomeScreen from "./components/WelcomeScreen.vue";
 import DoseTracker from "./components/DoseTracker.vue";
 import BackupExport from "./components/BackupExport.vue";
 import GoogleDriveBackup from "./components/GoogleDriveBackup.vue";
+import ScheduledBackup from "./components/ScheduledBackup.vue";
 
 // Welcome screen ref
 const welcomeScreen = ref<InstanceType<typeof WelcomeScreen> | null>(null);
@@ -197,6 +198,10 @@ onMounted(() => {
 
     <section class="drive-section">
       <GoogleDriveBackup />
+    </section>
+
+    <section class="scheduled-backup-section">
+      <ScheduledBackup />
     </section>
   </main>
 </template>

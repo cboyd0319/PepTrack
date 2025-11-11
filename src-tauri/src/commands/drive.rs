@@ -27,6 +27,8 @@ pub struct DriveTokens {
     pub access_token: String,
     pub refresh_token: Option<String>,
     pub expires_in: Option<u64>,
+    /// Timestamp when token expires (UTC)
+    pub expires_at: Option<String>,
 }
 
 /// Drive connection status
@@ -130,16 +132,26 @@ pub async fn complete_drive_oauth(
             format!("Failed to get access token: {}", e)
         })?;
 
+    let expires_in = token_result.expires_in().map(|d| d.as_secs());
+    let expires_at = expires_in.map(|secs| {
+        (time::OffsetDateTime::now_utc() + time::Duration::seconds(secs as i64)).to_string()
+    });
+
     let tokens = DriveTokens {
         access_token: token_result.access_token().secret().clone(),
         refresh_token: token_result.refresh_token().map(|t| t.secret().clone()),
-        expires_in: token_result.expires_in().map(|d| d.as_secs()),
+        expires_in,
+        expires_at,
     };
 
-    // Store tokens in keychain
+    // Store tokens and config
     store_drive_tokens(&app_state, &tokens)
         .await
         .map_err(|e| format!("Failed to store tokens: {}", e))?;
+
+    store_drive_config(&config)
+        .await
+        .map_err(|e| format!("Failed to store OAuth config: {}", e))?;
 
     info!("Google Drive OAuth completed successfully");
 
@@ -155,7 +167,8 @@ pub async fn complete_drive_oauth(
 /// Checks Google Drive connection status
 #[tauri::command]
 pub async fn check_drive_status(state: State<'_, AppState>) -> Result<DriveStatus, String> {
-    let tokens = load_drive_tokens(&state).await;
+    // Try to load and refresh tokens if needed
+    let tokens = load_and_refresh_tokens(&state).await;
 
     if let Ok(tokens) = tokens {
         let email = get_user_email(&tokens.access_token).await.ok();
@@ -193,7 +206,7 @@ pub async fn upload_to_drive(
 ) -> Result<String, String> {
     info!("Uploading backup to Google Drive: {}", filename);
 
-    let tokens = load_drive_tokens(&state)
+    let tokens = load_and_refresh_tokens(&state)
         .await
         .map_err(|e| format!("Not connected to Google Drive: {}", e))?;
 
@@ -240,6 +253,32 @@ async fn store_drive_tokens(_state: &AppState, tokens: &DriveTokens) -> Result<(
     Ok(())
 }
 
+async fn store_drive_config(config: &DriveOAuthConfig) -> Result<()> {
+    let data_dir = dirs::data_dir()
+        .context("Unable to determine data directory")?
+        .join("PepTrack");
+    std::fs::create_dir_all(&data_dir)?;
+
+    let config_file = data_dir.join("drive_oauth_config.json");
+    let json = serde_json::to_string(config)?;
+    std::fs::write(&config_file, json)
+        .context("Failed to store Drive OAuth config")?;
+
+    Ok(())
+}
+
+async fn load_drive_config() -> Result<DriveOAuthConfig> {
+    let data_dir = dirs::data_dir()
+        .context("Unable to determine data directory")?
+        .join("PepTrack");
+    let config_file = data_dir.join("drive_oauth_config.json");
+
+    let json = std::fs::read_to_string(&config_file)
+        .context("Drive OAuth config not found")?;
+    let config: DriveOAuthConfig = serde_json::from_str(&json)?;
+    Ok(config)
+}
+
 async fn load_drive_tokens(_state: &AppState) -> Result<DriveTokens> {
     let data_dir = dirs::data_dir()
         .context("Unable to determine data directory")?
@@ -253,16 +292,9 @@ async fn load_drive_tokens(_state: &AppState) -> Result<DriveTokens> {
 }
 
 // Public helper functions for use by scheduler
-pub async fn load_drive_tokens_internal(_state: &AppState) -> Result<DriveTokens> {
-    let data_dir = dirs::data_dir()
-        .context("Unable to determine data directory")?
-        .join("PepTrack");
-    let tokens_file = data_dir.join("drive_tokens.json");
-
-    let json = std::fs::read_to_string(&tokens_file)
-        .context("Drive tokens not found")?;
-    let tokens: DriveTokens = serde_json::from_str(&json)?;
-    Ok(tokens)
+pub async fn load_drive_tokens_internal(state: &AppState) -> Result<DriveTokens> {
+    // Use the same refresh logic as the commands
+    load_and_refresh_tokens(state).await
 }
 
 async fn delete_drive_tokens(_state: &AppState) -> Result<()> {
@@ -270,11 +302,19 @@ async fn delete_drive_tokens(_state: &AppState) -> Result<()> {
         .context("Unable to determine data directory")?
         .join("PepTrack");
     let tokens_file = data_dir.join("drive_tokens.json");
+    let config_file = data_dir.join("drive_oauth_config.json");
 
     if tokens_file.exists() {
         std::fs::remove_file(&tokens_file)
             .context("Failed to delete Drive tokens")?;
     }
+
+    // Also delete the OAuth config
+    if config_file.exists() {
+        std::fs::remove_file(&config_file)
+            .context("Failed to delete Drive OAuth config")?;
+    }
+
     Ok(())
 }
 
@@ -293,6 +333,92 @@ async fn get_user_email(access_token: &str) -> Result<String> {
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
         .context("Email not found in user info")
+}
+
+/// Check if token needs refresh (expires in less than 5 minutes)
+fn should_refresh_token(tokens: &DriveTokens) -> bool {
+    if let Some(expires_at_str) = &tokens.expires_at {
+        if let Ok(expires_at) = time::OffsetDateTime::parse(
+            expires_at_str,
+            &time::format_description::well_known::Rfc3339,
+        ) {
+            let now = time::OffsetDateTime::now_utc();
+            let buffer = time::Duration::minutes(5);
+            return now + buffer >= expires_at;
+        }
+    }
+    // If we can't determine expiry, assume it needs refresh
+    true
+}
+
+/// Refresh access token using refresh token
+async fn refresh_access_token(
+    tokens: &DriveTokens,
+    config: &DriveOAuthConfig,
+) -> Result<DriveTokens> {
+    let refresh_token = tokens
+        .refresh_token
+        .as_ref()
+        .context("No refresh token available")?;
+
+    let client = create_oauth_client(config)?;
+
+    let token_result = client
+        .exchange_refresh_token(&oauth2::RefreshToken::new(refresh_token.clone()))
+        .request_async(async_http_client)
+        .await
+        .context("Failed to refresh token")?;
+
+    let expires_in = token_result.expires_in().map(|d| d.as_secs());
+    let expires_at = expires_in.map(|secs| {
+        (time::OffsetDateTime::now_utc() + time::Duration::seconds(secs as i64)).to_string()
+    });
+
+    Ok(DriveTokens {
+        access_token: token_result.access_token().secret().clone(),
+        refresh_token: Some(refresh_token.clone()), // Keep the same refresh token
+        expires_in,
+        expires_at,
+    })
+}
+
+/// Load tokens and refresh if needed
+async fn load_and_refresh_tokens(state: &AppState) -> Result<DriveTokens> {
+    let mut tokens = load_drive_tokens(state).await?;
+
+    if should_refresh_token(&tokens) {
+        info!("Access token expired or expiring soon, refreshing...");
+
+        if tokens.refresh_token.is_some() {
+            // Try to load OAuth config and refresh
+            match load_drive_config().await {
+                Ok(config) => {
+                    match refresh_access_token(&tokens, &config).await {
+                        Ok(new_tokens) => {
+                            info!("Successfully refreshed access token");
+                            // Store the new tokens
+                            store_drive_tokens(state, &new_tokens).await?;
+                            tokens = new_tokens;
+                        }
+                        Err(e) => {
+                            warn!("Failed to refresh token: {:#}", e);
+                            // Return error - user needs to re-authenticate
+                            return Err(e.context("Token refresh failed - please reconnect Google Drive"));
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("OAuth config not found: {:#}", e);
+                    return Err(e.context("OAuth config not found - please reconnect Google Drive"));
+                }
+            }
+        } else {
+            warn!("No refresh token available");
+            return Err(anyhow::anyhow!("No refresh token available - please reconnect Google Drive"));
+        }
+    }
+
+    Ok(tokens)
 }
 
 async fn get_or_create_folder(
@@ -460,6 +586,7 @@ mod tests {
             access_token: "ya29.test_token".to_string(),
             refresh_token: Some("refresh_token_123".to_string()),
             expires_in: Some(3600),
+            expires_at: Some("2025-11-11T12:00:00Z".to_string()),
         };
 
         let json = serde_json::to_string(&tokens);
@@ -599,6 +726,7 @@ mod tests {
             access_token: "token_with-special.chars/123".to_string(),
             refresh_token: Some("refresh+token=abc".to_string()),
             expires_in: Some(7200),
+            expires_at: None,
         };
 
         let json = serde_json::to_string(&tokens).unwrap();
@@ -625,6 +753,7 @@ mod tests {
             access_token: "token1".to_string(),
             refresh_token: Some("refresh1".to_string()),
             expires_in: Some(3600),
+            expires_at: None,
         };
 
         let cloned = tokens.clone();
@@ -660,6 +789,7 @@ mod tests {
             access_token: "token".to_string(),
             refresh_token: None,
             expires_in: Some(0),
+            expires_at: None,
         };
         let json = serde_json::to_string(&tokens).unwrap();
         let deserialized: DriveTokens = serde_json::from_str(&json).unwrap();
@@ -670,6 +800,7 @@ mod tests {
             access_token: "token".to_string(),
             refresh_token: None,
             expires_in: Some(u64::MAX),
+            expires_at: None,
         };
         let json = serde_json::to_string(&tokens).unwrap();
         let deserialized: DriveTokens = serde_json::from_str(&json).unwrap();
@@ -696,6 +827,7 @@ mod tests {
             access_token: "secret_token".to_string(),
             refresh_token: Some("secret_refresh".to_string()),
             expires_in: Some(3600),
+            expires_at: None,
         };
 
         let debug_str = format!("{:?}", tokens);

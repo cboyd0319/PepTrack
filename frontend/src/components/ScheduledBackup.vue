@@ -4,9 +4,14 @@ import {
   getBackupSchedule,
   updateBackupSchedule,
   triggerManualBackup,
+  getBackupHistory,
+  getBackupProgress,
   type BackupSchedule,
   type BackupFrequency,
   type BackupDestination,
+  type BackupHistoryEntry,
+  type BackupProgress,
+  type CleanupSettings,
 } from "../api/peptrack";
 
 const schedule = ref<BackupSchedule>({
@@ -15,6 +20,13 @@ const schedule = ref<BackupSchedule>({
   destinations: ["Local"],
   lastBackup: null,
   nextBackup: null,
+  backupOnClose: false,
+  compress: true,
+  cleanupSettings: {
+    keepLastN: 10,
+    olderThanDays: null,
+  },
+  maxRetries: 3,
 });
 
 const loading = ref(false);
@@ -22,10 +34,16 @@ const saving = ref(false);
 const triggering = ref(false);
 const message = ref<string | null>(null);
 const error = ref<string | null>(null);
+const history = ref<BackupHistoryEntry[]>([]);
+const progress = ref<BackupProgress | null>(null);
 
-const frequencies: { value: BackupFrequency; label: string; description: string }[] = [
+// For DailyAt frequency
+const selectedFrequencyType = ref<"Hourly" | "DailyAt" | "Weekly" | "Manual">("Manual");
+const dailyAtHour = ref(9); // Default to 9 AM
+
+const frequencies: { value: string; label: string; description: string }[] = [
   { value: "Hourly", label: "Hourly", description: "Backup every hour" },
-  { value: "Daily", label: "Daily", description: "Backup once per day" },
+  { value: "DailyAt", label: "Daily at specific time", description: "Backup once per day at a specific hour" },
   { value: "Weekly", label: "Weekly", description: "Backup once per week" },
   { value: "Manual", label: "Manual Only", description: "No automatic backups" },
 ];
@@ -53,15 +71,62 @@ const nextBackupFormatted = computed(() => {
   }
 });
 
+function parseFrequency(freq: BackupFrequency) {
+  if (typeof freq === "string") {
+    selectedFrequencyType.value = freq as any;
+  } else if (typeof freq === "object" && "DailyAt" in freq) {
+    selectedFrequencyType.value = "DailyAt";
+    dailyAtHour.value = freq.DailyAt.hour;
+  }
+}
+
+function buildFrequency(): BackupFrequency {
+  if (selectedFrequencyType.value === "DailyAt") {
+    return { DailyAt: { hour: dailyAtHour.value } };
+  }
+  return selectedFrequencyType.value;
+}
+
 async function loadSchedule() {
   loading.value = true;
   error.value = null;
   try {
     schedule.value = await getBackupSchedule();
+    parseFrequency(schedule.value.frequency);
+
+    // Set defaults if not present
+    if (schedule.value.compress === undefined) {
+      schedule.value.compress = true;
+    }
+    if (schedule.value.backupOnClose === undefined) {
+      schedule.value.backupOnClose = false;
+    }
+    if (!schedule.value.cleanupSettings) {
+      schedule.value.cleanupSettings = { keepLastN: 10, olderThanDays: null };
+    }
+    if (schedule.value.maxRetries === undefined) {
+      schedule.value.maxRetries = 3;
+    }
   } catch (err) {
     error.value = `Failed to load schedule: ${String(err)}`;
   } finally {
     loading.value = false;
+  }
+}
+
+async function loadHistory() {
+  try {
+    history.value = await getBackupHistory();
+  } catch (err) {
+    console.error("Failed to load history:", err);
+  }
+}
+
+async function loadProgress() {
+  try {
+    progress.value = await getBackupProgress();
+  } catch (err) {
+    console.error("Failed to load progress:", err);
   }
 }
 
@@ -70,6 +135,9 @@ async function saveSchedule() {
   message.value = null;
   error.value = null;
   try {
+    // Build frequency from UI state
+    schedule.value.frequency = buildFrequency();
+
     schedule.value = await updateBackupSchedule(schedule.value);
     message.value = "✅ Schedule saved successfully!";
     setTimeout(() => {
@@ -89,8 +157,9 @@ async function runBackupNow() {
   try {
     const result = await triggerManualBackup();
     message.value = `✅ Backup completed! ${result}`;
-    // Reload schedule to update last backup time
+    // Reload schedule and history
     await loadSchedule();
+    await loadHistory();
   } catch (err) {
     error.value = `Backup failed: ${String(err)}`;
   } finally {
@@ -110,8 +179,35 @@ function toggleDestination(dest: BackupDestination) {
   }
 }
 
+function formatBytes(bytes: number | null | undefined): string {
+  if (!bytes) return "N/A";
+  const kb = bytes / 1024;
+  const mb = kb / 1024;
+  if (mb >= 1) return `${mb.toFixed(2)} MB`;
+  if (kb >= 1) return `${kb.toFixed(2)} KB`;
+  return `${bytes} bytes`;
+}
+
+function formatTimestamp(timestamp: string): string {
+  try {
+    return new Date(timestamp).toLocaleString();
+  } catch {
+    return timestamp;
+  }
+}
+
 onMounted(() => {
   loadSchedule();
+  loadHistory();
+  loadProgress();
+
+  // Poll progress every 2 seconds when backup is running
+  setInterval(async () => {
+    await loadProgress();
+    if (progress.value?.isRunning) {
+      await loadHistory();
+    }
+  }, 2000);
 });
 </script>
 
@@ -120,7 +216,7 @@ onMounted(() => {
     <div class="section-header">
       <h2>⏰ Scheduled Backups</h2>
       <p class="section-description">
-        Automatically backup your data on a regular schedule.
+        Automatically backup your data on a regular schedule with advanced options.
       </p>
     </div>
 
@@ -148,13 +244,30 @@ onMounted(() => {
           <button
             v-for="freq in frequencies"
             :key="freq.value"
-            @click="schedule.frequency = freq.value"
-            :class="['frequency-btn', { active: schedule.frequency === freq.value }]"
+            @click="selectedFrequencyType = freq.value as any"
+            :class="['frequency-btn', { active: selectedFrequencyType === freq.value }]"
             :disabled="!schedule.enabled && freq.value !== 'Manual'"
           >
             <div class="frequency-label">{{ freq.label }}</div>
             <div class="frequency-desc">{{ freq.description }}</div>
           </button>
+        </div>
+
+        <!-- Hour picker for DailyAt -->
+        <div v-if="selectedFrequencyType === 'DailyAt'" class="hour-picker">
+          <label>
+            Run at hour (0-23):
+            <input
+              type="number"
+              v-model.number="dailyAtHour"
+              min="0"
+              max="23"
+              class="hour-input"
+            />
+          </label>
+          <span class="hour-preview">
+            ({{ dailyAtHour.toString().padStart(2, '0') }}:00)
+          </span>
         </div>
       </div>
 
@@ -173,9 +286,87 @@ onMounted(() => {
             <span v-if="schedule.destinations.includes(dest.value)" class="check">✓</span>
           </button>
         </div>
+      </div>
+
+      <!-- Advanced Options -->
+      <div class="setting-row">
+        <label class="setting-label">⚙️ Advanced Options</label>
+
+        <div class="options-grid">
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="schedule.compress" />
+            <span>🗜️ Compress backups (gzip)</span>
+          </label>
+
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="schedule.backupOnClose" />
+            <span>💾 Backup when app closes</span>
+          </label>
+        </div>
+
+        <div class="input-row">
+          <label>
+            🔄 Max retries on failure:
+            <input
+              type="number"
+              v-model.number="schedule.maxRetries"
+              min="1"
+              max="10"
+              class="small-input"
+            />
+          </label>
+        </div>
+      </div>
+
+      <!-- Cleanup Settings -->
+      <div class="setting-row">
+        <label class="setting-label">🗑️ Old Backup Cleanup</label>
+
+        <div class="cleanup-options">
+          <label>
+            Keep last N backups:
+            <input
+              type="number"
+              v-model.number="schedule.cleanupSettings!.keepLastN"
+              min="1"
+              max="100"
+              class="small-input"
+              placeholder="Leave empty to keep all"
+            />
+          </label>
+
+          <label>
+            Delete backups older than (days):
+            <input
+              type="number"
+              v-model.number="schedule.cleanupSettings!.olderThanDays"
+              min="1"
+              max="365"
+              class="small-input"
+              placeholder="Leave empty to keep all"
+            />
+          </label>
+        </div>
         <p class="helper-text">
-          💡 Select one or more destinations for your backups
+          💡 Cleanup runs after each successful backup
         </p>
+      </div>
+
+      <!-- Backup Progress -->
+      <div v-if="progress?.isRunning" class="progress-section">
+        <h3>⏳ Backup in Progress</h3>
+        <div class="progress-bar">
+          <div class="progress-fill"></div>
+        </div>
+        <p class="current-step">{{ progress.currentStep }}</p>
+        <ul class="step-list">
+          <li v-for="step in progress.completedSteps" :key="step" class="step-completed">
+            ✅ {{ step }}
+          </li>
+          <li v-for="step in progress.failedSteps" :key="step" class="step-failed">
+            ❌ {{ step }}
+          </li>
+        </ul>
       </div>
 
       <!-- Backup Status -->
@@ -202,7 +393,7 @@ onMounted(() => {
 
         <button
           @click="runBackupNow"
-          :disabled="triggering || schedule.destinations.length === 0"
+          :disabled="triggering || schedule.destinations.length === 0 || progress?.isRunning"
           class="trigger-btn"
         >
           {{ triggering ? "⏳ Running..." : "▶️ Run Backup Now" }}
@@ -218,14 +409,43 @@ onMounted(() => {
         {{ error }}
       </div>
 
+      <!-- Backup History -->
+      <div v-if="history.length > 0" class="history-section">
+        <h3>📜 Backup History</h3>
+        <div class="history-table-container">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Timestamp</th>
+                <th>Destinations</th>
+                <th>Size</th>
+                <th>Compressed</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(entry, index) in history" :key="index" :class="{ 'failed-row': !entry.success }">
+                <td>{{ entry.success ? '✅' : '❌' }}</td>
+                <td>{{ formatTimestamp(entry.timestamp) }}</td>
+                <td>{{ entry.destinations.join(', ') }}</td>
+                <td>{{ formatBytes(entry.sizeBytes) }}</td>
+                <td>{{ entry.compressed ? '🗜️' : '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Info Box -->
       <div class="info-box">
         <p><strong>ℹ️ How it works:</strong></p>
         <ul>
           <li>Enable scheduled backups to automatically save your data</li>
-          <li>Choose how often you want backups to run</li>
+          <li>Choose how often you want backups to run (or set a specific time)</li>
           <li>Select where to save backups (local files and/or Google Drive)</li>
           <li>The scheduler runs in the background while the app is open</li>
+          <li>Backups are automatically retried on failure with exponential backoff</li>
+          <li>Old backups are cleaned up automatically based on your settings</li>
         </ul>
       </div>
     </div>
@@ -295,8 +515,9 @@ onMounted(() => {
 
 .frequency-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
+  margin-bottom: 12px;
 }
 
 .frequency-btn {
@@ -334,6 +555,29 @@ onMounted(() => {
 .frequency-desc {
   font-size: 12px;
   color: #666;
+}
+
+.hour-picker {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hour-input {
+  width: 80px;
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin-left: 8px;
+}
+
+.hour-preview {
+  color: #666;
+  font-style: italic;
 }
 
 .destinations {
@@ -381,10 +625,124 @@ onMounted(() => {
   font-size: 16px;
 }
 
+.options-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #333;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.input-row {
+  margin-top: 12px;
+}
+
+.input-row label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #333;
+}
+
+.small-input {
+  width: 100px;
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin-left: 8px;
+}
+
+.cleanup-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cleanup-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #333;
+}
+
 .helper-text {
   margin-top: 8px;
   font-size: 13px;
   color: #666;
+}
+
+.progress-section {
+  background: #fff3cd;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+  border: 2px solid #ffc107;
+}
+
+.progress-section h3 {
+  margin: 0 0 12px 0;
+  color: #333;
+  font-size: 18px;
+}
+
+.progress-bar {
+  height: 8px;
+  background: #e9ecef;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #007bff, #0056b3);
+  animation: progress-animation 1.5s infinite;
+}
+
+@keyframes progress-animation {
+  0% { width: 10%; }
+  50% { width: 90%; }
+  100% { width: 10%; }
+}
+
+.current-step {
+  font-weight: 600;
+  color: #333;
+  margin: 8px 0;
+}
+
+.step-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0 0;
+}
+
+.step-list li {
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.step-completed {
+  color: #28a745;
+}
+
+.step-failed {
+  color: #dc3545;
 }
 
 .status-section {
@@ -480,11 +838,58 @@ onMounted(() => {
   border: 1px solid #f5c6cb;
 }
 
+.history-section {
+  margin-top: 32px;
+}
+
+.history-section h3 {
+  margin: 0 0 16px 0;
+  color: #333;
+  font-size: 20px;
+}
+
+.history-table-container {
+  overflow-x: auto;
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.history-table thead {
+  background: #f8f9fa;
+}
+
+.history-table th {
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 2px solid #dee2e6;
+}
+
+.history-table td {
+  padding: 12px;
+  border-bottom: 1px solid #dee2e6;
+  color: #555;
+}
+
+.history-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+.failed-row {
+  background: #fff5f5;
+}
+
 .info-box {
   background: #e7f3ff;
   border-radius: 8px;
   padding: 16px;
   border-left: 4px solid #007bff;
+  margin-top: 24px;
 }
 
 .info-box p {

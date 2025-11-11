@@ -230,8 +230,18 @@ export async function uploadToDrive(filename: string, content: string) {
 
 // Scheduled Backup types
 
-export type BackupFrequency = "Hourly" | "Daily" | "Weekly" | "Manual";
+export type BackupFrequency =
+  | "Hourly"
+  | "Weekly"
+  | "Manual"
+  | { DailyAt: { hour: number } };
+
 export type BackupDestination = "Local" | "GoogleDrive";
+
+export interface CleanupSettings {
+  keepLastN?: number | null;
+  olderThanDays?: number | null;
+}
 
 export interface BackupSchedule {
   enabled: boolean;
@@ -239,6 +249,45 @@ export interface BackupSchedule {
   destinations: BackupDestination[];
   lastBackup?: string | null;
   nextBackup?: string | null;
+  backupOnClose?: boolean;
+  compress?: boolean;
+  cleanupSettings?: CleanupSettings;
+  maxRetries?: number;
+}
+
+export interface BackupHistoryEntry {
+  timestamp: string;
+  destinations: BackupDestination[];
+  success: boolean;
+  errorMessage?: string | null;
+  sizeBytes?: number | null;
+  compressed: boolean;
+}
+
+export interface BackupProgress {
+  isRunning: boolean;
+  currentStep: string;
+  completedSteps: string[];
+  failedSteps: string[];
+}
+
+export interface RestoreCounts {
+  protocols: number;
+  doseLogs: number;
+  literature: number;
+}
+
+export interface RestoreResult {
+  success: boolean;
+  counts: RestoreCounts;
+  metadata: BackupMetadata;
+}
+
+export interface BackupPreview {
+  metadata: BackupMetadata;
+  protocolsCount: number;
+  doseLogsCount: number;
+  literatureCount: number;
 }
 
 // Scheduled Backup API calls
@@ -253,4 +302,22 @@ export async function updateBackupSchedule(schedule: BackupSchedule) {
 
 export async function triggerManualBackup() {
   return invoke<string>("trigger_manual_backup");
+}
+
+export async function getBackupHistory() {
+  return invoke<BackupHistoryEntry[]>("get_backup_history");
+}
+
+export async function getBackupProgress() {
+  return invoke<BackupProgress>("get_backup_progress");
+}
+
+// Restore API calls
+
+export async function restoreFromBackup(filePath: string) {
+  return invoke<RestoreResult>("restore_from_backup", { filePath });
+}
+
+export async function previewBackup(filePath: string) {
+  return invoke<BackupPreview>("preview_backup", { filePath });
 }
