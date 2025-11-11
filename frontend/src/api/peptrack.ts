@@ -174,3 +174,56 @@ export async function exportBackupData() {
 export async function getBackupFilePath() {
   return invoke<string>("get_backup_file_path");
 }
+
+// Google Drive types
+
+export interface DriveOAuthConfig {
+  clientId: string;
+  clientSecret: string;
+}
+
+export interface DriveTokens {
+  accessToken: string;
+  refreshToken?: string | null;
+  expiresIn?: number | null;
+}
+
+export interface DriveStatus {
+  connected: boolean;
+  email?: string | null;
+}
+
+export interface AuthUrlResponse {
+  authUrl: string;
+  state: string;
+}
+
+// Google Drive API calls
+
+export async function startDriveOAuth(config: DriveOAuthConfig) {
+  return invoke<AuthUrlResponse>("start_drive_oauth", { config });
+}
+
+export async function completeDriveOAuth(
+  config: DriveOAuthConfig,
+  code: string,
+  stateParam: string
+) {
+  return invoke<DriveStatus>("complete_drive_oauth", {
+    config,
+    code,
+    stateParam,
+  });
+}
+
+export async function checkDriveStatus() {
+  return invoke<DriveStatus>("check_drive_status");
+}
+
+export async function disconnectDrive() {
+  return invoke<void>("disconnect_drive");
+}
+
+export async function uploadToDrive(filename: string, content: string) {
+  return invoke<string>("upload_to_drive", { filename, content });
+}

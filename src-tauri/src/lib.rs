@@ -8,6 +8,10 @@ use commands::{
     ai::{check_ai_availability, summarize_text},
     backup::{export_backup_data, get_backup_file_path},
     doses::{delete_dose_log, list_dose_logs, list_dose_logs_for_protocol, log_dose},
+    drive::{
+        check_drive_status, complete_drive_oauth, disconnect_drive, start_drive_oauth,
+        upload_to_drive, OAuthState,
+    },
     literature::{list_literature, search_cached_literature, search_literature},
     protocols::{list_protocols, save_protocol},
 };
@@ -33,6 +37,7 @@ pub fn run() {
             })?;
 
             app.manage(state);
+            app.manage(OAuthState::default());
             info!("PepTrack initialized");
             Ok(())
         })
@@ -49,7 +54,12 @@ pub fn run() {
             list_dose_logs_for_protocol,
             delete_dose_log,
             export_backup_data,
-            get_backup_file_path
+            get_backup_file_path,
+            start_drive_oauth,
+            complete_drive_oauth,
+            check_drive_status,
+            disconnect_drive,
+            upload_to_drive
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

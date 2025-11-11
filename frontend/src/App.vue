@@ -7,6 +7,7 @@ import LiteratureSearch from "./components/LiteratureSearch.vue";
 import WelcomeScreen from "./components/WelcomeScreen.vue";
 import DoseTracker from "./components/DoseTracker.vue";
 import BackupExport from "./components/BackupExport.vue";
+import GoogleDriveBackup from "./components/GoogleDriveBackup.vue";
 
 // Welcome screen ref
 const welcomeScreen = ref<InstanceType<typeof WelcomeScreen> | null>(null);
@@ -192,6 +193,10 @@ onMounted(() => {
 
     <section class="backup-section">
       <BackupExport />
+    </section>
+
+    <section class="drive-section">
+      <GoogleDriveBackup />
     </section>
   </main>
 </template>
