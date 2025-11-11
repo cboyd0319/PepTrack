@@ -106,10 +106,24 @@ async function handleExport() {
             v-model="useEncryption"
             :disabled="exporting"
           />
-          <span>🔒 Encrypt backup with password</span>
+          <span>🔒 Encrypt backup with password (optional)</span>
         </label>
 
         <div v-if="useEncryption" class="password-inputs">
+          <div class="critical-warning">
+            <div class="warning-icon">⚠️</div>
+            <div class="warning-content">
+              <strong>CRITICAL: NO PASSWORD RECOVERY POSSIBLE</strong>
+              <p>
+                If you forget this password, <strong>your backup will be permanently unrecoverable</strong>.
+                There is no password reset, no recovery mechanism, and no way to decrypt the backup without the exact password.
+              </p>
+              <p>
+                💡 <strong>Recommendation:</strong> Store this password in a secure password manager or write it down and keep it in a safe place.
+              </p>
+            </div>
+          </div>
+
           <div class="input-group">
             <label for="password">Password:</label>
             <input
@@ -132,9 +146,6 @@ async function handleExport() {
               autocomplete="new-password"
             />
           </div>
-          <p class="encryption-note">
-            🔑 <strong>Important:</strong> Keep this password safe! You'll need it to restore the backup. If you lose the password, the backup cannot be recovered.
-          </p>
         </div>
       </div>
 
@@ -251,6 +262,60 @@ async function handleExport() {
   border-top: 1px solid #dee2e6;
 }
 
+.critical-warning {
+  background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+  color: white;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+  border: 3px solid #bd2130;
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.warning-icon {
+  font-size: 32px;
+  flex-shrink: 0;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+.warning-content {
+  flex: 1;
+}
+
+.warning-content strong {
+  font-size: 16px;
+  display: block;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.warning-content p {
+  margin: 8px 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.warning-content p:last-child {
+  margin-bottom: 0;
+  background: rgba(255, 255, 255, 0.15);
+  padding: 8px 10px;
+  border-radius: 4px;
+  border-left: 3px solid #ffc107;
+}
+
 .input-group {
   margin-bottom: 12px;
 }
@@ -281,17 +346,6 @@ async function handleExport() {
 .input-group input[type="password"]:disabled {
   background-color: #e9ecef;
   cursor: not-allowed;
-}
-
-.encryption-note {
-  background: #fff3cd;
-  padding: 10px;
-  border-radius: 6px;
-  border-left: 3px solid #ff9800;
-  font-size: 13px;
-  color: #856404;
-  margin-top: 12px;
-  margin-bottom: 0;
 }
 
 .export-btn {
