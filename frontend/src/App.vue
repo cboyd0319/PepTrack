@@ -6,9 +6,8 @@ import AiSummaryPanel from "./components/AiSummaryPanel.vue";
 import LiteratureSearch from "./components/LiteratureSearch.vue";
 import WelcomeScreen from "./components/WelcomeScreen.vue";
 import DoseTracker from "./components/DoseTracker.vue";
-import BackupExport from "./components/BackupExport.vue";
-import GoogleDriveBackup from "./components/GoogleDriveBackup.vue";
-import ScheduledBackup from "./components/ScheduledBackup.vue";
+import Settings from "./components/Settings.vue";
+import Toast from "./components/Toast.vue";
 
 // Welcome screen ref
 const welcomeScreen = ref<InstanceType<typeof WelcomeScreen> | null>(null);
@@ -135,6 +134,7 @@ onMounted(() => {
 </script>
 
 <template>
+  <Toast />
   <WelcomeScreen ref="welcomeScreen" />
 
   <main class="page">
@@ -192,16 +192,8 @@ onMounted(() => {
       <LiteratureSearch />
     </section>
 
-    <section class="backup-section">
-      <BackupExport />
-    </section>
-
-    <section class="drive-section">
-      <GoogleDriveBackup />
-    </section>
-
-    <section class="scheduled-backup-section">
-      <ScheduledBackup />
+    <section class="settings-section">
+      <Settings />
     </section>
   </main>
 </template>

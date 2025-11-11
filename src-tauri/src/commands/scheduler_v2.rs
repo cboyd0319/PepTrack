@@ -230,8 +230,13 @@ impl SchedulerState {
                                     ).await {
                                         error!("Scheduled backup failed: {:#}", e);
                                         notif_state.send_notification(
-                                            "Backup Failed",
-                                            &format!("Scheduled backup failed: {}", e)
+                                            "❌ Scheduled Backup Failed",
+                                            &format!("Automatic backup failed: {}. Will retry next cycle.", e)
+                                        ).await;
+                                    } else {
+                                        notif_state.send_notification(
+                                            "✅ Scheduled Backup Complete",
+                                            "Automatic backup completed successfully"
                                         ).await;
                                     }
                                 } else {
@@ -353,12 +358,18 @@ pub async fn trigger_manual_backup(
 
     match result {
         Ok(msg) => {
-            scheduler_state.send_notification("Backup Complete", &msg).await;
+            scheduler_state.send_notification(
+                "✅ Backup Complete",
+                &format!("Manual backup completed successfully. {}", msg)
+            ).await;
             Ok(msg)
         }
         Err(e) => {
             let error_msg = format!("Backup failed: {}", e);
-            scheduler_state.send_notification("Backup Failed", &error_msg).await;
+            scheduler_state.send_notification(
+                "❌ Backup Failed",
+                &format!("Manual backup failed. {}", error_msg)
+            ).await;
             Err(error_msg)
         }
     }
