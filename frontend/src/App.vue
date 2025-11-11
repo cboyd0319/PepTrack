@@ -9,6 +9,10 @@ import DoseTracker from "./components/DoseTracker.vue";
 import Settings from "./components/Settings.vue";
 import Toast from "./components/Toast.vue";
 
+// Navigation
+type View = "protocols" | "doses" | "ai" | "literature" | "settings";
+const currentView = ref<View>("protocols");
+
 // Welcome screen ref
 const welcomeScreen = ref<InstanceType<typeof WelcomeScreen> | null>(null);
 
@@ -167,39 +171,87 @@ onUnmounted(() => {
       </div>
     </header>
 
+    <!-- Main Navigation -->
+    <nav class="main-nav">
+      <button
+        @click="currentView = 'protocols'"
+        :class="['nav-btn', { active: currentView === 'protocols' }]"
+      >
+        <span class="nav-icon">📋</span>
+        <span class="nav-label">Protocols</span>
+      </button>
+      <button
+        @click="currentView = 'doses'"
+        :class="['nav-btn', { active: currentView === 'doses' }]"
+      >
+        <span class="nav-icon">💉</span>
+        <span class="nav-label">Doses</span>
+      </button>
+      <button
+        @click="currentView = 'ai'"
+        :class="['nav-btn', { active: currentView === 'ai' }]"
+      >
+        <span class="nav-icon">🤖</span>
+        <span class="nav-label">AI Summary</span>
+      </button>
+      <button
+        @click="currentView = 'literature'"
+        :class="['nav-btn', { active: currentView === 'literature' }]"
+      >
+        <span class="nav-icon">📚</span>
+        <span class="nav-label">Literature</span>
+      </button>
+      <button
+        @click="currentView = 'settings'"
+        :class="['nav-btn', { active: currentView === 'settings' }]"
+      >
+        <span class="nav-icon">⚙️</span>
+        <span class="nav-label">Settings</span>
+      </button>
+    </nav>
+
     <section v-if="errorMessage" class="banner error">
       ⚠️ {{ errorMessage }}
     </section>
 
-    <section class="grid">
-      <ProtocolList
-        :protocols="protocols"
-        :loading="loadingProtocols"
-        @refresh="refreshProtocols"
-      />
+    <!-- Protocols View -->
+    <div v-if="currentView === 'protocols'" class="view-content">
+      <section class="grid">
+        <ProtocolList
+          :protocols="protocols"
+          :loading="loadingProtocols"
+          @refresh="refreshProtocols"
+        />
 
-      <ProtocolForm :form="form" :saving="savingProtocol" @submit="handleCreateProtocol" />
-    </section>
+        <ProtocolForm :form="form" :saving="savingProtocol" @submit="handleCreateProtocol" />
+      </section>
+    </div>
 
-    <section class="dose-section">
+    <!-- Doses View -->
+    <div v-if="currentView === 'doses'" class="view-content">
       <DoseTracker />
-    </section>
+    </div>
 
-    <AiSummaryPanel
-      :form="summaryForm"
-      :summarizing="summarizing"
-      :summary-output="summaryOutput"
-      :summary-provider="summaryProvider"
-      @summarize="handleSummarize"
-    />
+    <!-- AI Summary View -->
+    <div v-if="currentView === 'ai'" class="view-content">
+      <AiSummaryPanel
+        :form="summaryForm"
+        :summarizing="summarizing"
+        :summary-output="summaryOutput"
+        :summary-provider="summaryProvider"
+        @summarize="handleSummarize"
+      />
+    </div>
 
-    <section class="literature-section">
+    <!-- Literature View -->
+    <div v-if="currentView === 'literature'" class="view-content">
       <LiteratureSearch />
-    </section>
+    </div>
 
-    <section class="settings-section">
+    <!-- Settings View -->
+    <div v-if="currentView === 'settings'" class="view-content">
       <Settings />
-    </section>
+    </div>
   </main>
 </template>
 
@@ -209,6 +261,68 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: flex-start;
   gap: 20px;
+}
+
+/* Main Navigation */
+.main-nav {
+  display: flex;
+  gap: 8px;
+  margin: 20px 0;
+  padding: 8px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.nav-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+  font-weight: 600;
+  color: #666;
+}
+
+.nav-btn:hover {
+  background: #f8f9fa;
+  transform: translateY(-1px);
+}
+
+.nav-btn.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.nav-icon {
+  font-size: 20px;
+}
+
+.nav-label {
+  font-weight: 600;
+}
+
+.view-content {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .help-btn {

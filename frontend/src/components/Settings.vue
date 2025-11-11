@@ -62,137 +62,65 @@ function handleTestNotification() {
       </p>
     </div>
 
-    <div class="settings-layout">
-      <!-- Sidebar Navigation -->
-      <aside class="sidebar">
-        <div class="sidebar-section">
-          <div class="section-title">Backup & Restore</div>
+    <div class="tabs-container">
+      <div class="tabs-scroll-wrapper">
+        <div class="tabs">
           <button
-            @click="setActiveTab('scheduled')"
-            :class="['sidebar-item', { active: activeTab === 'scheduled' }]"
+            v-for="tab in tabs"
+            :key="tab.id"
+            @click="setActiveTab(tab.id)"
+            :class="['tab-button', { active: activeTab === tab.id }]"
           >
-            <span class="item-icon">⏰</span>
-            <div class="item-content">
-              <div class="item-label">Scheduled Backups</div>
-              <div class="item-desc">Automatic scheduling</div>
-            </div>
-          </button>
-          <button
-            @click="setActiveTab('drive')"
-            :class="['sidebar-item', { active: activeTab === 'drive' }]"
-          >
-            <span class="item-icon">☁️</span>
-            <div class="item-content">
-              <div class="item-label">Google Drive</div>
-              <div class="item-desc">Cloud backup setup</div>
-            </div>
-          </button>
-          <button
-            @click="setActiveTab('backup')"
-            :class="['sidebar-item', { active: activeTab === 'backup' }]"
-          >
-            <span class="item-icon">💾</span>
-            <div class="item-content">
-              <div class="item-label">Manual Backup</div>
-              <div class="item-desc">Export data manually</div>
-            </div>
-          </button>
-          <button
-            @click="setActiveTab('restore')"
-            :class="['sidebar-item', { active: activeTab === 'restore' }]"
-          >
-            <span class="item-icon">📥</span>
-            <div class="item-content">
-              <div class="item-label">Restore</div>
-              <div class="item-desc">Restore from backup</div>
+            <span class="tab-icon">{{ tab.label.split(' ')[0] }}</span>
+            <div class="tab-info">
+              <div class="tab-label">{{ tab.label.substring(tab.label.indexOf(' ') + 1) }}</div>
+              <div class="tab-desc">{{ tab.description }}</div>
             </div>
           </button>
         </div>
+      </div>
 
-        <div class="sidebar-section">
-          <div class="section-title">Inventory Management</div>
-          <button
-            @click="setActiveTab('suppliers')"
-            :class="['sidebar-item', { active: activeTab === 'suppliers' }]"
-          >
-            <span class="item-icon">🏢</span>
-            <div class="item-content">
-              <div class="item-label">Suppliers</div>
-              <div class="item-desc">Manage vendors</div>
-            </div>
-          </button>
-          <button
-            @click="setActiveTab('inventory')"
-            :class="['sidebar-item', { active: activeTab === 'inventory' }]"
-          >
-            <span class="item-icon">📦</span>
-            <div class="item-content">
-              <div class="item-label">Inventory</div>
-              <div class="item-desc">Track vials & stock</div>
-            </div>
-          </button>
-        </div>
-
-        <div class="sidebar-section">
-          <div class="section-title">Preferences</div>
-          <button
-            @click="setActiveTab('notifications')"
-            :class="['sidebar-item', { active: activeTab === 'notifications' }]"
-          >
-            <span class="item-icon">🔔</span>
-            <div class="item-content">
-              <div class="item-label">Notifications</div>
-              <div class="item-desc">Alert preferences</div>
-            </div>
-          </button>
-        </div>
-      </aside>
-
-      <!-- Main Content Area -->
-      <main class="content-area">
+      <div class="tab-content">
         <transition name="fade" mode="out-in">
-          <div v-if="activeTab === 'scheduled'" key="scheduled" class="content-panel">
+          <div v-if="activeTab === 'scheduled'" key="scheduled" class="tab-panel">
             <ScheduledBackup />
           </div>
 
-          <div v-else-if="activeTab === 'drive'" key="drive" class="content-panel">
+          <div v-else-if="activeTab === 'drive'" key="drive" class="tab-panel">
             <GoogleDriveBackup />
           </div>
 
-          <div v-else-if="activeTab === 'backup'" key="backup" class="content-panel">
+          <div v-else-if="activeTab === 'backup'" key="backup" class="tab-panel">
             <BackupExport />
           </div>
 
-          <div v-else-if="activeTab === 'restore'" key="restore" class="content-panel">
+          <div v-else-if="activeTab === 'restore'" key="restore" class="tab-panel">
             <RestoreBackup />
           </div>
 
-          <div v-else-if="activeTab === 'suppliers'" key="suppliers" class="content-panel">
+          <div v-else-if="activeTab === 'suppliers'" key="suppliers" class="tab-panel">
             <SupplierManagement />
           </div>
 
-          <div v-else-if="activeTab === 'inventory'" key="inventory" class="content-panel">
+          <div v-else-if="activeTab === 'inventory'" key="inventory" class="tab-panel">
             <InventoryManagement />
           </div>
 
-          <div v-else-if="activeTab === 'notifications'" key="notifications" class="content-panel">
+          <div v-else-if="activeTab === 'notifications'" key="notifications" class="tab-panel">
             <NotificationPreferences @test-notification="handleTestNotification" />
           </div>
         </transition>
-      </main>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
 .settings-page {
-  max-width: 100vw;
-  width: 100%;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 20px;
   min-height: 100vh;
-  box-sizing: border-box;
-  overflow-x: hidden;
 }
 
 .settings-header {
@@ -211,137 +139,89 @@ function handleTestNotification() {
   font-size: 14px;
 }
 
-/* Sidebar Layout */
-.settings-layout {
-  display: flex;
-  gap: 24px;
-  align-items: start;
-  width: 100%;
-}
-
-/* Sidebar */
-.sidebar {
+.tabs-container {
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  padding: 16px;
-  position: sticky;
-  top: 20px;
-  max-height: calc(100vh - 100px);
-  overflow-y: auto;
-  width: 280px;
-  min-width: 280px;
-  max-width: 280px;
-  flex-shrink: 0;
+  overflow: hidden;
 }
 
-.sidebar-section {
-  margin-bottom: 24px;
-}
-
-.sidebar-section:last-child {
-  margin-bottom: 0;
-}
-
-.section-title {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #999;
-  margin-bottom: 8px;
-  padding: 0 12px;
-}
-
-.sidebar-item {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  border: none;
-  background: transparent;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  text-align: left;
-  margin-bottom: 4px;
-}
-
-.sidebar-item:hover {
+/* Horizontal scrollable tabs */
+.tabs-scroll-wrapper {
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 2px solid #e0e0e0;
   background: #f8f9fa;
 }
 
-.sidebar-item.active {
-  background: #e7f3ff;
-  border-left: 3px solid #007bff;
-  padding-left: 9px;
+.tabs {
+  display: flex;
+  min-width: min-content;
+  padding: 12px;
+  gap: 8px;
 }
 
-.sidebar-item.active .item-label {
-  color: #007bff;
-  font-weight: 600;
+.tab-button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border: none;
+  background: white;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.item-icon {
+.tab-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.tab-button.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.tab-button.active .tab-label,
+.tab-button.active .tab-desc {
+  color: white;
+}
+
+.tab-icon {
   font-size: 24px;
   flex-shrink: 0;
-  width: 32px;
-  text-align: center;
 }
 
-.item-content {
-  flex: 1;
-  min-width: 0;
+.tab-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 
-.item-label {
+.tab-label {
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   color: #333;
-  margin-bottom: 2px;
-  transition: all 0.2s;
 }
 
-.item-desc {
+.tab-desc {
   font-size: 11px;
-  color: #999;
-  line-height: 1.3;
+  color: #666;
 }
 
-/* Content Area */
-.content-area {
-  flex: 1;
-  min-width: 0;
-  min-height: 600px;
-  overflow-x: hidden;
+/* Content area */
+.tab-content {
+  padding: 24px;
 }
 
-.content-panel {
+.tab-panel {
   animation: fadeIn 0.3s ease;
-  max-width: 100%;
-  overflow-x: hidden;
-}
-
-/* Force all child sections to respect the container */
-.content-panel > * {
-  max-width: 100%;
-  box-sizing: border-box;
-  margin: 0 !important;
-}
-
-/* Force tables to respect container width */
-.content-panel table {
-  table-layout: fixed;
-  width: 100%;
-  word-wrap: break-word;
-}
-
-.content-panel table td,
-.content-panel table th {
-  overflow-wrap: break-word;
-  word-wrap: break-word;
-  hyphens: auto;
 }
 
 @keyframes fadeIn {
@@ -370,29 +250,26 @@ function handleTestNotification() {
   transform: translateY(-10px);
 }
 
-/* Responsive: Stack on mobile */
+/* Responsive */
 @media (max-width: 768px) {
   .settings-page {
-    max-width: 100%;
     padding: 12px;
   }
 
-  .settings-layout {
-    grid-template-columns: 1fr;
-    gap: 16px;
+  .tabs {
+    padding: 8px;
   }
 
-  .sidebar {
-    position: static;
-    max-height: none;
+  .tab-button {
+    padding: 10px 16px;
   }
 
-  .content-area {
-    padding: 20px;
-  }
-
-  .item-desc {
+  .tab-desc {
     display: none;
+  }
+
+  .tab-content {
+    padding: 16px;
   }
 }
 </style>
