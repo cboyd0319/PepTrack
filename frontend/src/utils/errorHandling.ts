@@ -142,7 +142,8 @@ function detectErrorType(error: unknown): string {
  */
 export function showErrorToast(error: unknown, context?: ErrorContext) {
   const errorType = detectErrorType(error);
-  const errorInfo = ERROR_MESSAGES[errorType]?.(context) || ERROR_MESSAGES.unknown(context);
+  const errorFn = ERROR_MESSAGES[errorType] || ERROR_MESSAGES.unknown;
+  const errorInfo = errorFn!(context);
 
   // Add error details if available
   let message = errorInfo.message;

@@ -104,7 +104,11 @@ impl LiteratureFetcher for CrossrefFetcher {
                     )
                 };
 
-                let url = work.url.or_else(|| work.doi.as_ref().map(|doi| format!("https://doi.org/{}", doi)));
+                let url = work.url.or_else(|| {
+                    work.doi
+                        .as_ref()
+                        .map(|doi| format!("https://doi.org/{}", doi))
+                });
 
                 let published_date = work.published.and_then(|p| {
                     p.date_parts.first().and_then(|parts| {

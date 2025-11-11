@@ -105,10 +105,7 @@ impl PubMedFetcher {
         }
 
         let id_list = pmids.join(",");
-        let mut url = format!(
-            "{}?db=pubmed&id={}&retmode=json",
-            ESUMMARY_BASE, id_list
-        );
+        let mut url = format!("{}?db=pubmed&id={}&retmode=json", ESUMMARY_BASE, id_list);
 
         if let Some(key) = &self.api_key {
             url.push_str(&format!("&api_key={}", key));
@@ -142,10 +139,12 @@ impl PubMedFetcher {
                 }
 
                 let title = article.title.clone().unwrap_or_default();
-                let authors = article
-                    .authors
-                    .as_ref()
-                    .map(|a| a.iter().map(|author| author.name.clone()).collect::<Vec<_>>().join(", "));
+                let authors = article.authors.as_ref().map(|a| {
+                    a.iter()
+                        .map(|author| author.name.clone())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                });
 
                 let doi = article.articleids.as_ref().and_then(|ids| {
                     ids.iter()

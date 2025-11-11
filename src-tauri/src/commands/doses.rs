@@ -33,8 +33,13 @@ pub async fn log_dose(
 
 /// Lists all dose logs
 #[tauri::command]
-pub async fn list_dose_logs(state: State<'_, std::sync::Arc<AppState>>) -> Result<Vec<DoseLog>, String> {
-    state.storage.list_dose_logs().map_err(|err| err.to_string())
+pub async fn list_dose_logs(
+    state: State<'_, std::sync::Arc<AppState>>,
+) -> Result<Vec<DoseLog>, String> {
+    state
+        .storage
+        .list_dose_logs()
+        .map_err(|err| err.to_string())
 }
 
 /// Lists dose logs for a specific protocol
@@ -191,7 +196,10 @@ mod tests {
         assert!(payload.is_ok());
 
         let payload = payload.unwrap();
-        assert_eq!(payload.notes, Some("Test with émojis 💉 and ünicode".to_string()));
+        assert_eq!(
+            payload.notes,
+            Some("Test with émojis 💉 and ünicode".to_string())
+        );
     }
 
     #[test]

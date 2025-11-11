@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from "vue";
-import { showErrorToast, showSuccessToast } from "../utils/errorHandling";
+import { showErrorToast } from "../utils/errorHandling";
 import {
   getBackupSchedule,
   updateBackupSchedule,
@@ -12,7 +12,6 @@ import {
   type BackupDestination,
   type BackupHistoryEntry,
   type BackupProgress,
-  type CleanupSettings,
 } from "../api/peptrack";
 
 const schedule = ref<BackupSchedule>({
@@ -197,7 +196,7 @@ function formatTimestamp(timestamp: string): string {
   }
 }
 
-let progressInterval: number | null = null;
+let progressInterval: ReturnType<typeof setInterval> | null = null;
 
 onMounted(() => {
   loadSchedule();

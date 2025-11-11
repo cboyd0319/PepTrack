@@ -19,7 +19,7 @@
 use anyhow::{anyhow, Context, Result};
 use argon2::{
     password_hash::{PasswordHasher, SaltString},
-    Argon2, PasswordHash, PasswordVerifier,
+    Argon2,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chacha20poly1305::{
@@ -73,8 +73,8 @@ pub fn encrypt_backup(backup_json: &str, password: &str) -> Result<String> {
 
     // Derive encryption key from password using Argon2id
     let argon2 = Argon2::default();
-    let salt_string = SaltString::encode_b64(&salt_bytes)
-        .map_err(|e| anyhow!("Failed to encode salt: {}", e))?;
+    let salt_string =
+        SaltString::encode_b64(&salt_bytes).map_err(|e| anyhow!("Failed to encode salt: {}", e))?;
 
     let password_hash = argon2
         .hash_password(password.as_bytes(), &salt_string)
@@ -99,11 +99,11 @@ pub fn encrypt_backup(backup_json: &str, password: &str) -> Result<String> {
     // Generate random nonce
     let mut nonce_bytes = [0u8; NONCE_SIZE];
     OsRng.fill_bytes(&mut nonce_bytes);
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = Nonce::try_from(&nonce_bytes[..]).map_err(|_| anyhow!("Invalid nonce size"))?;
 
     // Encrypt the backup data
     let ciphertext = cipher
-        .encrypt(nonce, backup_json.as_bytes())
+        .encrypt(&nonce, backup_json.as_bytes())
         .map_err(|e| anyhow!("Encryption failed: {}", e))?;
 
     // Package into encrypted backup format
@@ -111,7 +111,7 @@ pub fn encrypt_backup(backup_json: &str, password: &str) -> Result<String> {
         version: BACKUP_ENCRYPTION_VERSION,
         encrypted: true,
         salt: BASE64.encode(&salt_bytes),
-        nonce: BASE64.encode(&nonce_bytes),
+        nonce: BASE64.encode(nonce_bytes),
         ciphertext: BASE64.encode(&ciphertext),
     };
 
@@ -169,8 +169,8 @@ pub fn decrypt_backup(encrypted_json: &str, password: &str) -> Result<String> {
 
     // Derive key from password using the stored salt
     let argon2 = Argon2::default();
-    let salt_string = SaltString::encode_b64(&salt_bytes)
-        .map_err(|e| anyhow!("Failed to encode salt: {}", e))?;
+    let salt_string =
+        SaltString::encode_b64(&salt_bytes).map_err(|e| anyhow!("Failed to encode salt: {}", e))?;
 
     let password_hash = argon2
         .hash_password(password.as_bytes(), &salt_string)
@@ -192,9 +192,9 @@ pub fn decrypt_backup(encrypted_json: &str, password: &str) -> Result<String> {
     let cipher = ChaCha20Poly1305::new((&key_array).into());
 
     // Decrypt
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = Nonce::try_from(&nonce_bytes[..]).map_err(|_| anyhow!("Invalid nonce size"))?;
     let plaintext = cipher
-        .decrypt(nonce, ciphertext.as_ref())
+        .decrypt(&nonce, ciphertext.as_ref())
         .map_err(|_| anyhow!("Decryption failed - incorrect password or corrupted data"))?;
 
     // Convert to string

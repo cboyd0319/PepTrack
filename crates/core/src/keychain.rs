@@ -4,13 +4,16 @@
 //! encryption keys using the macOS Keychain Services API, providing OS-level
 //! security and access control.
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use rand::{rngs::OsRng, RngCore};
 
+#[cfg(target_os = "macos")]
 use crate::encryption::{KeyMaterial, KeyProvider};
 
 #[cfg(target_os = "macos")]
-use security_framework::passwords::{delete_generic_password, get_generic_password, set_generic_password};
+use security_framework::passwords::{
+    delete_generic_password, get_generic_password, set_generic_password,
+};
 
 /// Key provider that stores encryption keys in the macOS Keychain.
 ///
@@ -42,11 +45,15 @@ use security_framework::passwords::{delete_generic_password, get_generic_passwor
 /// # }
 /// ```
 pub struct KeychainKeyProvider {
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     service: String,
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     account: String,
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 const SERVICE_NAME: &str = "com.peptrack.encryption-key";
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 const ACCOUNT_NAME: &str = "master-key";
 
 impl KeychainKeyProvider {
@@ -95,6 +102,7 @@ impl KeychainKeyProvider {
     }
 
     /// Generates a new 32-byte encryption key.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     fn generate_key() -> Result<Vec<u8>> {
         let mut key = vec![0u8; 32];
         OsRng.fill_bytes(&mut key);
@@ -188,8 +196,7 @@ pub fn migrate_file_key_to_keychain(
     let hex_key = fs::read_to_string(file_path)
         .with_context(|| format!("Failed to read key file: {}", file_path.display()))?;
 
-    let key_bytes = hex::decode(hex_key.trim())
-        .context("Failed to decode hex key from file")?;
+    let key_bytes = hex::decode(hex_key.trim()).context("Failed to decode hex key from file")?;
 
     if key_bytes.len() < 32 {
         return Err(anyhow!("Key file contains invalid key (< 32 bytes)"));
@@ -218,8 +225,8 @@ pub fn migrate_file_key_to_keychain(
 #[cfg(all(test, target_os = "macos"))]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     use crate::encryption::EnvelopeEncryption;
+    use std::sync::Arc;
 
     // Unique service name for testing to avoid conflicts
     const TEST_SERVICE: &str = "com.peptrack.test.encryption-key";

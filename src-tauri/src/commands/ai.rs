@@ -30,7 +30,9 @@ pub struct AiAvailabilityStatus {
 }
 
 #[tauri::command]
-pub async fn check_ai_availability(state: State<'_, std::sync::Arc<AppState>>) -> Result<AiAvailabilityStatus, String> {
+pub async fn check_ai_availability(
+    state: State<'_, std::sync::Arc<AppState>>,
+) -> Result<AiAvailabilityStatus, String> {
     let providers = state.ai_client.provider_chain();
 
     let codex_available = providers.iter().any(|p| matches!(p, AiProvider::Codex));
@@ -72,14 +74,13 @@ pub async fn summarize_text(
         format: payload.format.unwrap_or(SummaryFormat::Markdown),
     };
 
-    let response = state
-        .ai_client
-        .summarize(request)
-        .await
-        .map_err(|err| {
-            warn!("AI summarization failed: {:#}", err);
-            format!("AI summarization failed: {}. Make sure Codex CLI or Claude CLI is installed.", err)
-        })?;
+    let response = state.ai_client.summarize(request).await.map_err(|err| {
+        warn!("AI summarization failed: {:#}", err);
+        format!(
+            "AI summarization failed: {}. Make sure Codex CLI or Claude CLI is installed.",
+            err
+        )
+    })?;
 
     info!("Summarization successful using {:?}", response.provider);
 

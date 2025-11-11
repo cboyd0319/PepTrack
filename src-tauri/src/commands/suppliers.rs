@@ -21,19 +21,18 @@ pub async fn create_supplier(
     supplier.website = payload.website;
     supplier.notes = payload.notes;
 
-    state
-        .storage
-        .upsert_supplier(&supplier)
-        .map_err(|e| {
-            error!("Failed to create supplier: {:#}", e);
-            format!("Failed to create supplier: {}", e)
-        })?;
+    state.storage.upsert_supplier(&supplier).map_err(|e| {
+        error!("Failed to create supplier: {:#}", e);
+        format!("Failed to create supplier: {}", e)
+    })?;
 
     Ok(supplier)
 }
 
 #[tauri::command]
-pub async fn list_suppliers(state: State<'_, std::sync::Arc<AppState>>) -> Result<Vec<Supplier>, String> {
+pub async fn list_suppliers(
+    state: State<'_, std::sync::Arc<AppState>>,
+) -> Result<Vec<Supplier>, String> {
     state.storage.list_suppliers().map_err(|e| {
         error!("Failed to list suppliers: {:#}", e);
         format!("Failed to list suppliers: {}", e)
@@ -45,13 +44,10 @@ pub async fn get_supplier(
     state: State<'_, std::sync::Arc<AppState>>,
     supplier_id: String,
 ) -> Result<Option<Supplier>, String> {
-    state
-        .storage
-        .get_supplier(&supplier_id)
-        .map_err(|e| {
-            error!("Failed to get supplier: {:#}", e);
-            format!("Failed to get supplier: {}", e)
-        })
+    state.storage.get_supplier(&supplier_id).map_err(|e| {
+        error!("Failed to get supplier: {:#}", e);
+        format!("Failed to get supplier: {}", e)
+    })
 }
 
 #[tauri::command]
@@ -77,13 +73,10 @@ pub async fn update_supplier(
     supplier.notes = payload.notes.or(supplier.notes);
     supplier.updated_at = OffsetDateTime::now_utc();
 
-    state
-        .storage
-        .upsert_supplier(&supplier)
-        .map_err(|e| {
-            error!("Failed to update supplier: {:#}", e);
-            format!("Failed to update supplier: {}", e)
-        })?;
+    state.storage.upsert_supplier(&supplier).map_err(|e| {
+        error!("Failed to update supplier: {:#}", e);
+        format!("Failed to update supplier: {}", e)
+    })?;
 
     Ok(supplier)
 }
@@ -95,13 +88,10 @@ pub async fn delete_supplier(
 ) -> Result<(), String> {
     info!("Deleting supplier: {}", supplier_id);
 
-    state
-        .storage
-        .delete_supplier(&supplier_id)
-        .map_err(|e| {
-            error!("Failed to delete supplier: {:#}", e);
-            format!("Failed to delete supplier: {}", e)
-        })
+    state.storage.delete_supplier(&supplier_id).map_err(|e| {
+        error!("Failed to delete supplier: {:#}", e);
+        format!("Failed to delete supplier: {}", e)
+    })
 }
 
 // ========== Inventory Commands ==========
@@ -111,7 +101,10 @@ pub async fn create_inventory_item(
     state: State<'_, std::sync::Arc<AppState>>,
     payload: CreateInventoryPayload,
 ) -> Result<InventoryItem, String> {
-    info!("Creating inventory item for protocol: {}", payload.protocol_id);
+    info!(
+        "Creating inventory item for protocol: {}",
+        payload.protocol_id
+    );
 
     let mut item = InventoryItem::new(&payload.protocol_id);
     item.supplier_id = payload.supplier_id;
@@ -126,19 +119,18 @@ pub async fn create_inventory_item(
     item.lot_number = payload.lot_number;
     item.notes = payload.notes;
 
-    state
-        .storage
-        .upsert_inventory_item(&item)
-        .map_err(|e| {
-            error!("Failed to create inventory item: {:#}", e);
-            format!("Failed to create inventory item: {}", e)
-        })?;
+    state.storage.upsert_inventory_item(&item).map_err(|e| {
+        error!("Failed to create inventory item: {:#}", e);
+        format!("Failed to create inventory item: {}", e)
+    })?;
 
     Ok(item)
 }
 
 #[tauri::command]
-pub async fn list_inventory(state: State<'_, std::sync::Arc<AppState>>) -> Result<Vec<InventoryItem>, String> {
+pub async fn list_inventory(
+    state: State<'_, std::sync::Arc<AppState>>,
+) -> Result<Vec<InventoryItem>, String> {
     state.storage.list_inventory().map_err(|e| {
         error!("Failed to list inventory: {:#}", e);
         format!("Failed to list inventory: {}", e)
@@ -164,13 +156,10 @@ pub async fn get_inventory_item(
     state: State<'_, std::sync::Arc<AppState>>,
     item_id: String,
 ) -> Result<Option<InventoryItem>, String> {
-    state
-        .storage
-        .get_inventory_item(&item_id)
-        .map_err(|e| {
-            error!("Failed to get inventory item: {:#}", e);
-            format!("Failed to get inventory item: {}", e)
-        })
+    state.storage.get_inventory_item(&item_id).map_err(|e| {
+        error!("Failed to get inventory item: {:#}", e);
+        format!("Failed to get inventory item: {}", e)
+    })
 }
 
 #[tauri::command]
@@ -202,13 +191,10 @@ pub async fn update_inventory_item(
     item.notes = payload.notes.or(item.notes);
     item.updated_at = OffsetDateTime::now_utc();
 
-    state
-        .storage
-        .upsert_inventory_item(&item)
-        .map_err(|e| {
-            error!("Failed to update inventory item: {:#}", e);
-            format!("Failed to update inventory item: {}", e)
-        })?;
+    state.storage.upsert_inventory_item(&item).map_err(|e| {
+        error!("Failed to update inventory item: {:#}", e);
+        format!("Failed to update inventory item: {}", e)
+    })?;
 
     Ok(item)
 }
@@ -220,13 +206,10 @@ pub async fn delete_inventory_item(
 ) -> Result<(), String> {
     info!("Deleting inventory item: {}", item_id);
 
-    state
-        .storage
-        .delete_inventory_item(&item_id)
-        .map_err(|e| {
-            error!("Failed to delete inventory item: {:#}", e);
-            format!("Failed to delete inventory item: {}", e)
-        })
+    state.storage.delete_inventory_item(&item_id).map_err(|e| {
+        error!("Failed to delete inventory item: {:#}", e);
+        format!("Failed to delete inventory item: {}", e)
+    })
 }
 
 // ========== Payload Structs ==========
@@ -298,8 +281,14 @@ mod tests {
 
         let payload: CreateSupplierPayload = serde_json::from_str(json).unwrap();
         assert_eq!(payload.name, "Peptide Sciences");
-        assert_eq!(payload.contact_email, Some("info@peptidesciences.com".to_string()));
-        assert_eq!(payload.website, Some("https://peptidesciences.com".to_string()));
+        assert_eq!(
+            payload.contact_email,
+            Some("info@peptidesciences.com".to_string())
+        );
+        assert_eq!(
+            payload.website,
+            Some("https://peptidesciences.com".to_string())
+        );
     }
 
     #[test]

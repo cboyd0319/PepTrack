@@ -26,12 +26,12 @@
 //! # }
 //! ```
 
-pub mod models;
-pub mod pubmed;
-pub mod openalex;
 pub mod crossref;
+pub mod models;
+pub mod openalex;
+pub mod pubmed;
 
-pub use models::{LiteratureResult, LiteratureFetcher};
-pub use pubmed::PubMedFetcher;
-pub use openalex::OpenAlexFetcher;
 pub use crossref::CrossrefFetcher;
+pub use models::{LiteratureFetcher, LiteratureResult};
+pub use openalex::OpenAlexFetcher;
+pub use pubmed::PubMedFetcher;

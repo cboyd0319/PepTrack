@@ -185,9 +185,11 @@ impl StorageManager {
     pub fn list_dose_logs_for_protocol(&self, protocol_id: &str) -> Result<Vec<DoseLog>> {
         let conn = self.open_connection()?;
         let mut stmt = conn.prepare(
-            "SELECT payload FROM dose_logs WHERE protocol_id = ?1 ORDER BY logged_at DESC"
+            "SELECT payload FROM dose_logs WHERE protocol_id = ?1 ORDER BY logged_at DESC",
         )?;
-        let mut rows = stmt.query([protocol_id]).context("Unable to run dose logs query")?;
+        let mut rows = stmt
+            .query([protocol_id])
+            .context("Unable to run dose logs query")?;
         let mut logs = Vec::new();
         while let Some(row) = rows.next()? {
             let blob: Vec<u8> = row.get(0)?;
@@ -235,8 +237,11 @@ impl StorageManager {
     /// Returns entries ordered by indexed date (most recent first).
     pub fn list_literature(&self) -> Result<Vec<LiteratureEntry>> {
         let conn = self.open_connection()?;
-        let mut stmt = conn.prepare("SELECT payload FROM literature_cache ORDER BY indexed_at DESC")?;
-        let mut rows = stmt.query([]).context("Unable to run literature list query")?;
+        let mut stmt =
+            conn.prepare("SELECT payload FROM literature_cache ORDER BY indexed_at DESC")?;
+        let mut rows = stmt
+            .query([])
+            .context("Unable to run literature list query")?;
         let mut entries = Vec::new();
         while let Some(row) = rows.next()? {
             let blob: Vec<u8> = row.get(0)?;
@@ -298,7 +303,9 @@ impl StorageManager {
     pub fn list_suppliers(&self) -> Result<Vec<Supplier>> {
         let conn = self.open_connection()?;
         let mut stmt = conn.prepare("SELECT payload FROM suppliers ORDER BY name ASC")?;
-        let mut rows = stmt.query([]).context("Unable to run supplier list query")?;
+        let mut rows = stmt
+            .query([])
+            .context("Unable to run supplier list query")?;
         let mut suppliers = Vec::new();
         while let Some(row) = rows.next()? {
             let blob: Vec<u8> = row.get(0)?;
@@ -360,7 +367,9 @@ impl StorageManager {
     pub fn list_inventory(&self) -> Result<Vec<InventoryItem>> {
         let conn = self.open_connection()?;
         let mut stmt = conn.prepare("SELECT payload FROM inventory ORDER BY updated_at DESC")?;
-        let mut rows = stmt.query([]).context("Unable to run inventory list query")?;
+        let mut rows = stmt
+            .query([])
+            .context("Unable to run inventory list query")?;
         let mut items = Vec::new();
         while let Some(row) = rows.next()? {
             let blob: Vec<u8> = row.get(0)?;
@@ -371,8 +380,12 @@ impl StorageManager {
 
     pub fn list_inventory_by_protocol(&self, protocol_id: &str) -> Result<Vec<InventoryItem>> {
         let conn = self.open_connection()?;
-        let mut stmt = conn.prepare("SELECT payload FROM inventory WHERE protocol_id = ?1 ORDER BY updated_at DESC")?;
-        let mut rows = stmt.query(params![protocol_id]).context("Unable to run inventory query for protocol")?;
+        let mut stmt = conn.prepare(
+            "SELECT payload FROM inventory WHERE protocol_id = ?1 ORDER BY updated_at DESC",
+        )?;
+        let mut rows = stmt
+            .query(params![protocol_id])
+            .context("Unable to run inventory query for protocol")?;
         let mut items = Vec::new();
         while let Some(row) = rows.next()? {
             let blob: Vec<u8> = row.get(0)?;

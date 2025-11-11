@@ -25,7 +25,9 @@ pub struct SearchLiteraturePayload {
 
 /// Lists all cached literature entries
 #[tauri::command]
-pub async fn list_literature(state: State<'_, std::sync::Arc<AppState>>) -> Result<Vec<LiteratureEntry>, String> {
+pub async fn list_literature(
+    state: State<'_, std::sync::Arc<AppState>>,
+) -> Result<Vec<LiteratureEntry>, String> {
     state
         .storage
         .list_literature()
