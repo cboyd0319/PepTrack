@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context, Result};
-use chacha20poly1305::aead::{Aead, KeyInit, OsRng};
+use chacha20poly1305::aead::{Aead, KeyInit};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
-use rand::RngCore;
+use rand::{rngs::OsRng, RngCore};
 use zeroize::Zeroizing;
 
 pub trait KeyProvider: Send + Sync {
@@ -51,12 +51,13 @@ impl<P: KeyProvider + 'static> EnvelopeEncryption<P> {
 
     pub fn seal(&self, plaintext: &[u8]) -> Result<Vec<u8>> {
         let key_bytes = self.key_provider.key_material()?.to_key_bytes()?;
-        let cipher = ChaCha20Poly1305::new(Key::from(key_bytes));
+        let key = Key::from(key_bytes);
+        let cipher = ChaCha20Poly1305::new(&key);
         let mut nonce_bytes = [0u8; 12];
         OsRng.fill_bytes(&mut nonce_bytes);
         let nonce = Nonce::from(nonce_bytes);
         let mut ciphertext = cipher
-            .encrypt(nonce.clone(), plaintext)
+            .encrypt(&nonce, plaintext)
             .map_err(|e| anyhow::anyhow!("encryption failed: {e}"))?;
 
         let mut output = nonce_bytes.to_vec();
@@ -71,11 +72,14 @@ impl<P: KeyProvider + 'static> EnvelopeEncryption<P> {
 
         let (nonce_bytes, ciphertext) = payload.split_at(12);
         let key_bytes = self.key_provider.key_material()?.to_key_bytes()?;
-        let cipher = ChaCha20Poly1305::new(Key::from(key_bytes));
-        let nonce = Nonce::from_slice(nonce_bytes);
+        let key = Key::from(key_bytes);
+        let cipher = ChaCha20Poly1305::new(&key);
+        let mut nonce_arr = [0u8; 12];
+        nonce_arr.copy_from_slice(nonce_bytes);
+        let nonce = Nonce::from(nonce_arr);
 
         cipher
-            .decrypt(nonce, ciphertext)
+            .decrypt(&nonce, ciphertext)
             .map_err(|e| anyhow::anyhow!("decryption failed: {e}"))
     }
 }
