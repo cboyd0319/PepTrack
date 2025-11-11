@@ -12,10 +12,8 @@ use state::build_state;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let state = build_state().expect("Failed to initialize application state");
-
     tauri::Builder::default()
-        .setup(move |app| {
+        .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
@@ -23,7 +21,15 @@ pub fn run() {
                         .build(),
                 )?;
             }
-            app.manage(state.clone());
+
+            let state = build_state().map_err(|err| {
+                let msg = format!("Failed to initialize application state: {err:#}");
+                eprintln!("{msg}");
+                let boxed: Box<dyn std::error::Error> = err.into();
+                tauri::Error::Setup(boxed.into())
+            })?;
+
+            app.manage(state);
             info!("PepTrack initialized");
             Ok(())
         })
