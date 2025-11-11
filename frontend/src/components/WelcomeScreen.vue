@@ -53,6 +53,14 @@ const dontShowAgain = ref(false);
 
 const STORAGE_KEY = 'peptrack-welcome-shown';
 
+// Expose method to parent component
+defineExpose({
+  open: () => {
+    showWelcome.value = true;
+    dontShowAgain.value = false;
+  }
+});
+
 onMounted(() => {
   const hasSeenWelcome = localStorage.getItem(STORAGE_KEY);
   if (!hasSeenWelcome) {

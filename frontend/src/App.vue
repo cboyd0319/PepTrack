@@ -6,6 +6,9 @@ import AiSummaryPanel from "./components/AiSummaryPanel.vue";
 import LiteratureSearch from "./components/LiteratureSearch.vue";
 import WelcomeScreen from "./components/WelcomeScreen.vue";
 import DoseTracker from "./components/DoseTracker.vue";
+
+// Welcome screen ref
+const welcomeScreen = ref<InstanceType<typeof WelcomeScreen> | null>(null);
 import type {
   PeptideProtocol,
   SummaryFormat,
@@ -106,20 +109,31 @@ async function handleSummarize() {
   }
 }
 
+function showHelp() {
+  welcomeScreen.value?.open();
+}
+
 onMounted(() => {
   refreshProtocols();
 });
 </script>
 
 <template>
-  <WelcomeScreen />
+  <WelcomeScreen ref="welcomeScreen" />
 
   <main class="page">
     <header>
-      <h1>🧪 PepTrack</h1>
-      <p class="subtitle">
-        Keep track of your peptides and research - all stored privately on your computer.
-      </p>
+      <div class="header-content">
+        <div>
+          <h1>🧪 PepTrack</h1>
+          <p class="subtitle">
+            Keep track of your peptides and research - all stored privately on your computer.
+          </p>
+        </div>
+        <button @click="showHelp" class="help-btn" title="Show help and welcome info">
+          ❓ Help
+        </button>
+      </div>
     </header>
 
     <section v-if="errorMessage" class="banner error">
@@ -153,3 +167,46 @@ onMounted(() => {
     </section>
   </main>
 </template>
+
+<style scoped>
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.help-btn {
+  padding: 8px 16px;
+  background-color: #3498db;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.help-btn:hover {
+  background-color: #2980b9;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+}
+
+.help-btn:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 768px) {
+  .header-content {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .help-btn {
+    align-self: flex-end;
+  }
+}
+</style>

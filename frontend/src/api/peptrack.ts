@@ -132,3 +132,18 @@ export async function listDoseLogsForProtocol(protocolId: string) {
 export async function deleteDoseLog(logId: string) {
   return invoke<void>("delete_dose_log", { logId });
 }
+
+// AI availability types
+
+export interface AiAvailabilityStatus {
+  codexAvailable: boolean;
+  claudeAvailable: boolean;
+  anyAvailable: boolean;
+  preferredProvider?: string | null;
+}
+
+// AI availability check
+
+export async function checkAiAvailability() {
+  return invoke<AiAvailabilityStatus>("check_ai_availability");
+}

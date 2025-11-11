@@ -5,7 +5,7 @@ use tauri::Manager;
 use tracing::info;
 
 use commands::{
-    ai::summarize_text,
+    ai::{check_ai_availability, summarize_text},
     doses::{delete_dose_log, list_dose_logs, list_dose_logs_for_protocol, log_dose},
     literature::{list_literature, search_cached_literature, search_literature},
     protocols::{list_protocols, save_protocol},
@@ -38,6 +38,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_protocols,
             save_protocol,
+            check_ai_availability,
             summarize_text,
             list_literature,
             search_cached_literature,
