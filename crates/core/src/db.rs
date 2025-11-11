@@ -149,6 +149,46 @@ impl<P: KeyProvider + 'static> StorageManager<P> {
         Ok(())
     }
 
+    /// Lists all dose logs across all protocols
+    ///
+    /// Returns logs ordered by logged_at (most recent first).
+    pub fn list_dose_logs(&self) -> Result<Vec<DoseLog>> {
+        let conn = self.open_connection()?;
+        let mut stmt = conn.prepare("SELECT payload FROM dose_logs ORDER BY logged_at DESC")?;
+        let mut rows = stmt.query([]).context("Unable to run dose logs query")?;
+        let mut logs = Vec::new();
+        while let Some(row) = rows.next()? {
+            let blob: Vec<u8> = row.get(0)?;
+            logs.push(self.decode_dose_log(&blob)?);
+        }
+        Ok(logs)
+    }
+
+    /// Lists dose logs for a specific protocol
+    ///
+    /// Returns logs ordered by logged_at (most recent first).
+    pub fn list_dose_logs_for_protocol(&self, protocol_id: &str) -> Result<Vec<DoseLog>> {
+        let conn = self.open_connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT payload FROM dose_logs WHERE protocol_id = ?1 ORDER BY logged_at DESC"
+        )?;
+        let mut rows = stmt.query([protocol_id]).context("Unable to run dose logs query")?;
+        let mut logs = Vec::new();
+        while let Some(row) = rows.next()? {
+            let blob: Vec<u8> = row.get(0)?;
+            logs.push(self.decode_dose_log(&blob)?);
+        }
+        Ok(logs)
+    }
+
+    /// Deletes a specific dose log by ID
+    pub fn delete_dose_log(&self, log_id: &str) -> Result<()> {
+        let conn = self.open_connection()?;
+        conn.execute("DELETE FROM dose_logs WHERE id = ?1", params![log_id])
+            .context("Failed to delete dose log")?;
+        Ok(())
+    }
+
     pub fn cache_literature(&self, entry: &LiteratureEntry) -> Result<()> {
         let conn = self.open_connection()?;
         let payload = serde_json::to_vec(entry).context("Failed to serialize literature entry")?;
@@ -224,6 +264,13 @@ impl<P: KeyProvider + 'static> StorageManager<P> {
         let entry: LiteratureEntry =
             serde_json::from_slice(&decrypted).context("Failed to deserialize literature entry")?;
         Ok(entry)
+    }
+
+    fn decode_dose_log(&self, blob: &[u8]) -> Result<DoseLog> {
+        let decrypted = self.encryption.open(blob)?;
+        let log: DoseLog =
+            serde_json::from_slice(&decrypted).context("Failed to deserialize dose log")?;
+        Ok(log)
     }
 }
 

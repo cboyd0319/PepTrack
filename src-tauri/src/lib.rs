@@ -6,6 +6,7 @@ use tracing::info;
 
 use commands::{
     ai::summarize_text,
+    doses::{delete_dose_log, list_dose_logs, list_dose_logs_for_protocol, log_dose},
     literature::{list_literature, search_cached_literature, search_literature},
     protocols::{list_protocols, save_protocol},
 };
@@ -40,7 +41,11 @@ pub fn run() {
             summarize_text,
             list_literature,
             search_cached_literature,
-            search_literature
+            search_literature,
+            log_dose,
+            list_dose_logs,
+            list_dose_logs_for_protocol,
+            delete_dose_log
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

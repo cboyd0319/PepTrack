@@ -5,6 +5,7 @@ import ProtocolForm from "./components/ProtocolForm.vue";
 import AiSummaryPanel from "./components/AiSummaryPanel.vue";
 import LiteratureSearch from "./components/LiteratureSearch.vue";
 import WelcomeScreen from "./components/WelcomeScreen.vue";
+import DoseTracker from "./components/DoseTracker.vue";
 import type {
   PeptideProtocol,
   SummaryFormat,
@@ -133,6 +134,10 @@ onMounted(() => {
       />
 
       <ProtocolForm :form="form" :saving="savingProtocol" @submit="handleCreateProtocol" />
+    </section>
+
+    <section class="dose-section">
+      <DoseTracker />
     </section>
 
     <AiSummaryPanel

@@ -96,3 +96,39 @@ export async function searchCachedLiterature(query: string) {
 export async function searchLiterature(payload: SearchLiteraturePayload) {
   return invoke<LiteratureSearchResult[]>("search_literature", { payload });
 }
+
+// Dose logging types
+
+export interface DoseLog {
+  id: string;
+  protocol_id: string;
+  site: string;
+  amount_mg: number;
+  notes?: string | null;
+  logged_at: string;
+}
+
+export interface LogDosePayload {
+  protocolId: string;
+  site: string;
+  amountMg: number;
+  notes?: string;
+}
+
+// Dose logging API calls
+
+export async function logDose(payload: LogDosePayload) {
+  return invoke<DoseLog>("log_dose", { payload });
+}
+
+export async function listDoseLogs() {
+  return invoke<DoseLog[]>("list_dose_logs");
+}
+
+export async function listDoseLogsForProtocol(protocolId: string) {
+  return invoke<DoseLog[]>("list_dose_logs_for_protocol", { protocolId });
+}
+
+export async function deleteDoseLog(logId: string) {
+  return invoke<void>("delete_dose_log", { logId });
+}
