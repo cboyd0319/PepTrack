@@ -227,3 +227,30 @@ export async function disconnectDrive() {
 export async function uploadToDrive(filename: string, content: string) {
   return invoke<string>("upload_to_drive", { filename, content });
 }
+
+// Scheduled Backup types
+
+export type BackupFrequency = "Hourly" | "Daily" | "Weekly" | "Manual";
+export type BackupDestination = "Local" | "GoogleDrive";
+
+export interface BackupSchedule {
+  enabled: boolean;
+  frequency: BackupFrequency;
+  destinations: BackupDestination[];
+  lastBackup?: string | null;
+  nextBackup?: string | null;
+}
+
+// Scheduled Backup API calls
+
+export async function getBackupSchedule() {
+  return invoke<BackupSchedule>("get_backup_schedule");
+}
+
+export async function updateBackupSchedule(schedule: BackupSchedule) {
+  return invoke<BackupSchedule>("update_backup_schedule", { schedule });
+}
+
+export async function triggerManualBackup() {
+  return invoke<string>("trigger_manual_backup");
+}

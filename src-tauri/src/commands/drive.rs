@@ -252,6 +252,19 @@ async fn load_drive_tokens(_state: &AppState) -> Result<DriveTokens> {
     Ok(tokens)
 }
 
+// Public helper functions for use by scheduler
+pub async fn load_drive_tokens_internal(_state: &AppState) -> Result<DriveTokens> {
+    let data_dir = dirs::data_dir()
+        .context("Unable to determine data directory")?
+        .join("PepTrack");
+    let tokens_file = data_dir.join("drive_tokens.json");
+
+    let json = std::fs::read_to_string(&tokens_file)
+        .context("Drive tokens not found")?;
+    let tokens: DriveTokens = serde_json::from_str(&json)?;
+    Ok(tokens)
+}
+
 async fn delete_drive_tokens(_state: &AppState) -> Result<()> {
     let data_dir = dirs::data_dir()
         .context("Unable to determine data directory")?
@@ -283,6 +296,14 @@ async fn get_user_email(access_token: &str) -> Result<String> {
 }
 
 async fn get_or_create_folder(
+    client: &Client,
+    access_token: &str,
+    folder_name: &str,
+) -> Result<String> {
+    get_or_create_folder_internal(client, access_token, folder_name).await
+}
+
+pub async fn get_or_create_folder_internal(
     client: &Client,
     access_token: &str,
     folder_name: &str,
@@ -333,6 +354,16 @@ async fn get_or_create_folder(
 }
 
 async fn upload_file(
+    client: &Client,
+    access_token: &str,
+    folder_id: &str,
+    filename: &str,
+    content: &str,
+) -> Result<String> {
+    upload_file_internal(client, access_token, folder_id, filename, content).await
+}
+
+pub async fn upload_file_internal(
     client: &Client,
     access_token: &str,
     folder_id: &str,

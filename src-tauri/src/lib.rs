@@ -14,6 +14,7 @@ use commands::{
     },
     literature::{list_literature, search_cached_literature, search_literature},
     protocols::{list_protocols, save_protocol},
+    scheduler::{get_backup_schedule, trigger_manual_backup, update_backup_schedule, SchedulerState},
 };
 use state::build_state;
 
@@ -36,8 +37,29 @@ pub fn run() {
                 tauri::Error::Setup(boxed.into())
             })?;
 
-            app.manage(state);
+            let scheduler_state = SchedulerState::new();
+            let state_arc = std::sync::Arc::new(state);
+
+            // Load schedule from disk
+            let scheduler_clone = scheduler_state.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = scheduler_clone.load_from_disk().await {
+                    eprintln!("Failed to load backup schedule: {:#}", e);
+                }
+            });
+
+            // Start background scheduler
+            let scheduler_clone2 = scheduler_state.clone();
+            let state_clone = state_arc.clone();
+            tauri::async_runtime::spawn(async move {
+                // Give the app a moment to fully initialize
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                scheduler_clone2.start_scheduler(state_clone).await;
+            });
+
+            app.manage(state_arc);
             app.manage(OAuthState::default());
+            app.manage(scheduler_state);
             info!("PepTrack initialized");
             Ok(())
         })
@@ -59,7 +81,10 @@ pub fn run() {
             complete_drive_oauth,
             check_drive_status,
             disconnect_drive,
-            upload_to_drive
+            upload_to_drive,
+            get_backup_schedule,
+            update_backup_schedule,
+            trigger_manual_backup
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
