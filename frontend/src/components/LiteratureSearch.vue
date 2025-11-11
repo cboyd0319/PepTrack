@@ -6,13 +6,22 @@
     <!-- Search Form -->
     <div class="search-box">
       <input
+        id="literature-search-input"
         v-model="searchQuery"
         type="text"
         placeholder="What do you want to research? (e.g., BPC-157 wound healing)"
         @keyup.enter="handleSearch"
         class="search-input"
+        aria-label="Search scientific literature"
+        autocomplete="off"
       />
-      <button @click="handleSearch" :disabled="isSearching || !searchQuery.trim()" class="search-btn">
+      <button
+        @click="handleSearch"
+        :disabled="isSearching || !searchQuery.trim()"
+        class="search-btn"
+        aria-label="Search for research papers"
+        :aria-busy="isSearching"
+      >
         {{ isSearching ? 'Finding Papers...' : 'Find Papers' }}
       </button>
     </div>
@@ -49,15 +58,22 @@
     <div class="cached-section">
       <div class="cached-header">
         <h3>Your Saved Papers ({{ cachedLiterature.length }})</h3>
-        <button @click="loadCachedLiterature" class="refresh-btn">↻ Refresh</button>
+        <button
+          @click="loadCachedLiterature"
+          class="refresh-btn"
+          aria-label="Refresh saved papers"
+        >↻ Refresh</button>
       </div>
 
       <input
+        id="cache-search-input"
         v-model="cacheSearchQuery"
         type="text"
         placeholder="Search your saved papers..."
         @input="handleCacheSearch"
         class="search-input"
+        aria-label="Search saved papers"
+        autocomplete="off"
       />
 
       <div v-if="filteredCachedLiterature.length === 0" class="no-results">
@@ -83,6 +99,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { showErrorToast } from '../utils/errorHandling';
 import {
   listLiterature,
   searchCachedLiterature,
@@ -113,9 +130,8 @@ async function loadCachedLiterature() {
   try {
     cachedLiterature.value = await listLiterature();
     filteredCachedLiterature.value = cachedLiterature.value;
-  } catch (e) {
-    console.error('Failed to load saved papers:', e);
-    error.value = 'Could not load your saved papers. Please try again.';
+  } catch (error: unknown) {
+    showErrorToast(error, { operation: 'load saved papers' });
   }
 }
 
@@ -139,9 +155,8 @@ async function handleSearch() {
 
     // Refresh saved papers after search
     await loadCachedLiterature();
-  } catch (e: any) {
-    console.error('Search failed:', e);
-    error.value = `Couldn't find papers. Please check your internet connection and try again.`;
+  } catch (error: unknown) {
+    showErrorToast(error, { operation: 'search literature' });
   } finally {
     isSearching.value = false;
   }
@@ -155,8 +170,8 @@ async function handleCacheSearch() {
 
   try {
     filteredCachedLiterature.value = await searchCachedLiterature(cacheSearchQuery.value);
-  } catch (e) {
-    console.error('Cache search failed:', e);
+  } catch (error: unknown) {
+    showErrorToast(error, { operation: 'search cached literature' });
   }
 }
 

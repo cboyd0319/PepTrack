@@ -24,21 +24,27 @@ function setActiveTab(tab: Tab) {
 
 function handleTestNotification() {
   // Send a test notification
-  if ('Notification' in window) {
-    if (Notification.permission === 'granted') {
-      new Notification('🔔 Test Notification', {
-        body: 'This is a test notification from PepTrack!',
-        icon: '/icon.png', // Optional: add your app icon
-      });
-    } else if (Notification.permission !== 'denied') {
-      Notification.requestPermission().then((permission) => {
-        if (permission === 'granted') {
-          new Notification('🔔 Test Notification', {
-            body: 'This is a test notification from PepTrack!',
-          });
-        }
-      });
+  try {
+    if ('Notification' in window) {
+      if (Notification.permission === 'granted') {
+        new Notification('🔔 Test Notification', {
+          body: 'This is a test notification from PepTrack!',
+          icon: '/icon.png', // Optional: add your app icon
+        });
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then((permission) => {
+          if (permission === 'granted') {
+            new Notification('🔔 Test Notification', {
+              body: 'This is a test notification from PepTrack!',
+            });
+          }
+        }).catch((error) => {
+          console.error('Failed to request notification permission:', error);
+        });
+      }
     }
+  } catch (error) {
+    console.error('Notification API error:', error);
   }
 }
 </script>

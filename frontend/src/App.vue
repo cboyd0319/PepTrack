@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import ProtocolList from "./components/ProtocolList.vue";
 import ProtocolForm from "./components/ProtocolForm.vue";
 import AiSummaryPanel from "./components/AiSummaryPanel.vue";
@@ -130,6 +130,11 @@ onMounted(() => {
   // Listen for connectivity changes
   window.addEventListener('online', updateOnlineStatus);
   window.addEventListener('offline', updateOnlineStatus);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('online', updateOnlineStatus);
+  window.removeEventListener('offline', updateOnlineStatus);
 });
 </script>
 

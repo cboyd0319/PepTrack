@@ -9,6 +9,7 @@ import {
   type DriveOAuthConfig,
   type DriveStatus,
 } from "../api/peptrack";
+import { showErrorToast, showSuccessToast } from "../utils/errorHandling";
 
 const driveStatus = ref<DriveStatus | null>(null);
 const loading = ref(false);
@@ -29,8 +30,8 @@ const oauthAuthUrl = ref<string | null>(null);
 async function loadDriveStatus() {
   try {
     driveStatus.value = await checkDriveStatus();
-  } catch (error) {
-    console.error("Failed to check Drive status:", error);
+  } catch (error: unknown) {
+    showErrorToast(error, { operation: 'check Google Drive status' });
   }
 }
 
@@ -54,11 +55,16 @@ async function startOAuthFlow() {
     message.value = "Opening browser for Google authentication... Please complete the authorization and come back here.";
 
     // Store config in localStorage for callback handling
-    localStorage.setItem("drive_oauth_config", JSON.stringify(oauthConfig.value));
-    localStorage.setItem("drive_oauth_state", response.state);
+    try {
+      localStorage.setItem("drive_oauth_config", JSON.stringify(oauthConfig.value));
+      localStorage.setItem("drive_oauth_state", response.state);
+    } catch (storageError) {
+      console.warn('Failed to store OAuth state in localStorage:', storageError);
+      // Continue anyway - OAuth can still work without localStorage persistence
+    }
 
-  } catch (error) {
-    errorMessage.value = `Failed to start OAuth: ${String(error)}`;
+  } catch (error: unknown) {
+    showErrorToast(error, { operation: 'start Google Drive OAuth' });
   } finally {
     loading.value = false;
   }

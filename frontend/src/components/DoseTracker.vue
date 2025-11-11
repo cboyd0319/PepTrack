@@ -7,9 +7,15 @@
     <div class="log-dose-section panel">
       <h3>➕ Log a Dose</h3>
       <form @submit.prevent="handleLogDose" class="dose-form">
-        <label>
+        <label for="dose-protocol-select">
           Which Peptide Plan?
-          <select v-model="form.protocolId" required>
+        </label>
+        <select
+          id="dose-protocol-select"
+          v-model="form.protocolId"
+          required
+          aria-label="Select peptide protocol"
+        >
             <option value="">Select a plan...</option>
             <option v-for="protocol in protocols" :key="protocol.id" :value="protocol.id">
               {{ protocol.name }} ({{ protocol.peptide_name }})
@@ -18,39 +24,53 @@
         </label>
 
         <div class="form-row">
-          <label>
+          <label for="dose-amount-input">
             Amount (mg)
-            <input
-              v-model.number="form.amountMg"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="e.g., 0.5"
-              required
-            />
           </label>
+          <input
+            id="dose-amount-input"
+            v-model.number="form.amountMg"
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="e.g., 0.5"
+            required
+            aria-label="Dose amount in milligrams"
+            autocomplete="off"
+          />
 
-          <label>
+          <label for="dose-site-input">
             Injection Site
-            <input
-              v-model="form.site"
-              type="text"
-              placeholder="e.g., Left Abdomen, Right Thigh"
-              required
-            />
           </label>
+          <input
+            id="dose-site-input"
+            v-model="form.site"
+            type="text"
+            placeholder="e.g., Left Abdomen, Right Thigh"
+            required
+            aria-label="Injection site location"
+            autocomplete="off"
+          />
         </div>
 
-        <label>
+        <label for="dose-notes-input">
           Notes (optional)
-          <textarea
-            v-model="form.notes"
-            rows="2"
-            placeholder="How you're feeling, any side effects, etc."
-          />
         </label>
+        <textarea
+          id="dose-notes-input"
+          v-model="form.notes"
+          rows="2"
+          placeholder="How you're feeling, any side effects, etc."
+          aria-label="Additional notes about dose"
+        />
 
-        <button type="submit" :disabled="isLogging" class="primary-btn">
+        <button
+          type="submit"
+          :disabled="isLogging"
+          class="primary-btn"
+          aria-label="Log dose entry"
+          :aria-busy="isLogging"
+        >
           {{ isLogging ? '⏳ Logging...' : '💾 Save Dose' }}
         </button>
       </form>
@@ -71,16 +91,25 @@
       <div class="history-header">
         <h3>📊 Your Dose History</h3>
         <div class="history-controls">
-          <label>
+          <label for="filter-protocol-select">
             Filter by plan:
-            <select v-model="filterProtocolId" @change="loadDoses">
-              <option value="">All Plans</option>
-              <option v-for="protocol in protocols" :key="protocol.id" :value="protocol.id">
-                {{ protocol.name }}
-              </option>
-            </select>
           </label>
-          <button @click="loadDoses" class="refresh-btn">↻ Refresh</button>
+          <select
+            id="filter-protocol-select"
+            v-model="filterProtocolId"
+            @change="loadDoses"
+            aria-label="Filter doses by protocol"
+          >
+            <option value="">All Plans</option>
+            <option v-for="protocol in protocols" :key="protocol.id" :value="protocol.id">
+              {{ protocol.name }}
+            </option>
+          </select>
+          <button
+            @click="loadDoses"
+            class="refresh-btn"
+            aria-label="Refresh dose history"
+          >↻ Refresh</button>
         </div>
       </div>
 
@@ -95,7 +124,11 @@
               <strong>{{ getProtocolName(dose.protocol_id) }}</strong>
               <span class="dose-amount">{{ dose.amount_mg }} mg</span>
             </div>
-            <button @click="deleteDose(dose.id)" class="delete-btn" title="Delete this dose">
+            <button
+              @click="deleteDose(dose.id)"
+              class="delete-btn"
+              :aria-label="`Delete dose from ${formatDate(dose.logged_at)}`"
+            >
               🗑️
             </button>
           </div>
@@ -120,6 +153,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { showErrorToast, showSuccessToast } from '../utils/errorHandling';
 import {
   logDose,
   listDoseLogs,
@@ -155,9 +189,8 @@ onMounted(async () => {
 async function loadProtocols() {
   try {
     protocols.value = await listProtocols();
-  } catch (e: any) {
-    console.error('Failed to load protocols:', e);
-    error.value = 'Could not load your peptide plans. Please try again.';
+  } catch (error: unknown) {
+    showErrorToast(error, { operation: 'load protocols' });
   }
 }
 
@@ -169,9 +202,8 @@ async function loadDoses() {
     } else {
       doses.value = await listDoseLogs();
     }
-  } catch (e: any) {
-    console.error('Failed to load doses:', e);
-    error.value = 'Could not load dose history. Please try again.';
+  } catch (error: unknown) {
+    showErrorToast(error, { operation: 'load dose history' });
   }
 }
 
@@ -187,7 +219,7 @@ async function handleLogDose() {
 
   try {
     await logDose(form.value);
-    successMessage.value = 'Dose logged successfully!';
+    showSuccessToast('Dose logged successfully!');
 
     // Reset form
     form.value = {
@@ -199,14 +231,8 @@ async function handleLogDose() {
 
     // Reload doses
     await loadDoses();
-
-    // Clear success message after 3 seconds
-    setTimeout(() => {
-      successMessage.value = null;
-    }, 3000);
-  } catch (e: any) {
-    console.error('Failed to log dose:', e);
-    error.value = 'Could not save dose. Please try again.';
+  } catch (error: unknown) {
+    showErrorToast(error, { operation: 'log dose' });
   } finally {
     isLogging.value = false;
   }
@@ -220,13 +246,9 @@ async function deleteDose(logId: string) {
   try {
     await deleteDoseLog(logId);
     await loadDoses();
-    successMessage.value = 'Dose deleted.';
-    setTimeout(() => {
-      successMessage.value = null;
-    }, 2000);
-  } catch (e: any) {
-    console.error('Failed to delete dose:', e);
-    error.value = 'Could not delete dose. Please try again.';
+    showSuccessToast('Dose deleted successfully');
+  } catch (error: unknown) {
+    showErrorToast(error, { operation: 'delete dose' });
   }
 }
 

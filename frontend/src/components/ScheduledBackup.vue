@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, onUnmounted, computed } from "vue";
+import { showErrorToast, showSuccessToast } from "../utils/errorHandling";
 import {
   getBackupSchedule,
   updateBackupSchedule,
@@ -117,16 +118,16 @@ async function loadSchedule() {
 async function loadHistory() {
   try {
     history.value = await getBackupHistory();
-  } catch (err) {
-    console.error("Failed to load history:", err);
+  } catch (error: unknown) {
+    showErrorToast(error, { operation: 'load backup history' });
   }
 }
 
 async function loadProgress() {
   try {
     progress.value = await getBackupProgress();
-  } catch (err) {
-    console.error("Failed to load progress:", err);
+  } catch (error: unknown) {
+    showErrorToast(error, { operation: 'load backup progress' });
   }
 }
 
@@ -196,18 +197,34 @@ function formatTimestamp(timestamp: string): string {
   }
 }
 
+let progressInterval: number | null = null;
+
 onMounted(() => {
   loadSchedule();
   loadHistory();
   loadProgress();
 
-  // Poll progress every 2 seconds when backup is running
-  setInterval(async () => {
-    await loadProgress();
-    if (progress.value?.isRunning) {
-      await loadHistory();
+  // Poll progress every 2 seconds when backup is running  // Use flag to prevent overlapping requests
+  let isPolling = false;
+  progressInterval = setInterval(async () => {
+    if (isPolling) return;
+    isPolling = true;
+    try {
+      await loadProgress();
+      if (progress.value?.isRunning) {
+        await loadHistory();
+      }
+    } finally {
+      isPolling = false;
     }
   }, 2000);
+});
+
+onUnmounted(() => {
+  if (progressInterval) {
+    clearInterval(progressInterval);
+    progressInterval = null;
+  }
 });
 </script>
 
@@ -322,12 +339,12 @@ onMounted(() => {
       <div class="setting-row">
         <label class="setting-label">🗑️ Old Backup Cleanup</label>
 
-        <div class="cleanup-options">
+        <div class="cleanup-options" v-if="schedule.cleanupSettings">
           <label>
             Keep last N backups:
             <input
               type="number"
-              v-model.number="schedule.cleanupSettings!.keepLastN"
+              v-model.number="schedule.cleanupSettings.keepLastN"
               min="1"
               max="100"
               class="small-input"
@@ -339,7 +356,7 @@ onMounted(() => {
             Delete backups older than (days):
             <input
               type="number"
-              v-model.number="schedule.cleanupSettings!.olderThanDays"
+              v-model.number="schedule.cleanupSettings.olderThanDays"
               min="1"
               max="365"
               class="small-input"
@@ -424,7 +441,7 @@ onMounted(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(entry, index) in history" :key="index" :class="{ 'failed-row': !entry.success }">
+              <tr v-for="entry in history" :key="entry.timestamp" :class="{ 'failed-row': !entry.success }">
                 <td>{{ entry.success ? '✅' : '❌' }}</td>
                 <td>{{ formatTimestamp(entry.timestamp) }}</td>
                 <td>{{ entry.destinations.join(', ') }}</td>

@@ -160,9 +160,9 @@ export interface BackupMetadata {
 
 export interface BackupData {
   metadata: BackupMetadata;
-  protocols: any[];
-  doseLogs: any[];
-  literature: any[];
+  protocols: PeptideProtocol[];
+  doseLogs: DoseLog[];
+  literature: LiteratureEntry[];
 }
 
 // Backup API calls

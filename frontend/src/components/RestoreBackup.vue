@@ -98,6 +98,12 @@ function formatDate(dateStr: string): string {
     return dateStr;
   }
 }
+
+function getFileName(path: string | null): string {
+  if (!path) return '';
+  // Split by both forward and back slashes for cross-platform compatibility
+  return path.split(/[\\/]/).pop() || path;
+}
 </script>
 
 <template>
@@ -112,7 +118,13 @@ function formatDate(dateStr: string): string {
     <div class="restore-content">
       <!-- File Selection -->
       <div v-if="!selectedFile" class="file-selection">
-        <button @click="selectBackupFile" :disabled="loading" class="select-btn">
+        <button
+          @click="selectBackupFile"
+          :disabled="loading"
+          class="select-btn"
+          aria-label="Select backup file to restore"
+          :aria-busy="loading"
+        >
           {{ loading ? "⏳ Loading..." : "📂 Select Backup File" }}
         </button>
         <p class="helper-text">
@@ -124,7 +136,11 @@ function formatDate(dateStr: string): string {
       <div v-if="preview && !restoreResult" class="preview-section">
         <div class="preview-header">
           <h3>📋 Backup Preview</h3>
-          <button @click="reset" class="reset-btn" title="Select a different file">
+          <button
+            @click="reset"
+            class="reset-btn"
+            aria-label="Select a different backup file"
+          >
             ↻ Select Different File
           </button>
         </div>
@@ -132,7 +148,7 @@ function formatDate(dateStr: string): string {
         <div class="preview-card">
           <div class="preview-row">
             <span class="preview-label">📁 File:</span>
-            <span class="preview-value filename">{{ selectedFile?.split('/').pop() || selectedFile }}</span>
+            <span class="preview-value filename">{{ getFileName(selectedFile) }}</span>
           </div>
           <div class="preview-row">
             <span class="preview-label">📅 Backup Date:</span>
