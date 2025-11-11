@@ -866,4 +866,95 @@ mod tests {
         // Should NOT be snake_case (already camelCase field names)
         assert!(!json.contains("is_connected"));
     }
+
+    #[test]
+    fn test_token_expiry_detection_expired() {
+        // Token expired 10 minutes ago
+        let past_time = time::OffsetDateTime::now_utc() - time::Duration::minutes(10);
+        let expires_at = past_time.format(&time::format_description::well_known::Rfc3339).unwrap();
+
+        let tokens = DriveTokens {
+            access_token: "test_token".to_string(),
+            refresh_token: Some("refresh_token".to_string()),
+            expires_in: Some(3600),
+            expires_at: Some(expires_at),
+        };
+
+        assert!(should_refresh_token(&tokens), "Expired token should require refresh");
+    }
+
+    #[test]
+    fn test_token_expiry_detection_expires_soon() {
+        // Token expires in 2 minutes (less than 5 minute buffer)
+        let soon = time::OffsetDateTime::now_utc() + time::Duration::minutes(2);
+        let expires_at = soon.format(&time::format_description::well_known::Rfc3339).unwrap();
+
+        let tokens = DriveTokens {
+            access_token: "test_token".to_string(),
+            refresh_token: Some("refresh_token".to_string()),
+            expires_in: Some(120),
+            expires_at: Some(expires_at),
+        };
+
+        assert!(should_refresh_token(&tokens), "Token expiring soon should require refresh");
+    }
+
+    #[test]
+    fn test_token_expiry_detection_still_valid() {
+        // Token expires in 30 minutes (more than 5 minute buffer)
+        let future = time::OffsetDateTime::now_utc() + time::Duration::minutes(30);
+        let expires_at = future.format(&time::format_description::well_known::Rfc3339).unwrap();
+
+        let tokens = DriveTokens {
+            access_token: "test_token".to_string(),
+            refresh_token: Some("refresh_token".to_string()),
+            expires_in: Some(1800),
+            expires_at: Some(expires_at),
+        };
+
+        assert!(!should_refresh_token(&tokens), "Valid token should not require refresh");
+    }
+
+    #[test]
+    fn test_token_expiry_detection_no_expiry_info() {
+        // No expiry information - should default to refresh
+        let tokens = DriveTokens {
+            access_token: "test_token".to_string(),
+            refresh_token: Some("refresh_token".to_string()),
+            expires_in: None,
+            expires_at: None,
+        };
+
+        assert!(should_refresh_token(&tokens), "Token without expiry info should require refresh");
+    }
+
+    #[test]
+    fn test_token_expiry_detection_invalid_format() {
+        // Invalid expiry format - should default to refresh
+        let tokens = DriveTokens {
+            access_token: "test_token".to_string(),
+            refresh_token: Some("refresh_token".to_string()),
+            expires_in: Some(3600),
+            expires_at: Some("invalid-date-format".to_string()),
+        };
+
+        assert!(should_refresh_token(&tokens), "Token with invalid expiry format should require refresh");
+    }
+
+    #[test]
+    fn test_token_expiry_detection_exactly_at_buffer() {
+        // Token expires in exactly 5 minutes (at the buffer boundary)
+        let boundary = time::OffsetDateTime::now_utc() + time::Duration::minutes(5);
+        let expires_at = boundary.format(&time::format_description::well_known::Rfc3339).unwrap();
+
+        let tokens = DriveTokens {
+            access_token: "test_token".to_string(),
+            refresh_token: Some("refresh_token".to_string()),
+            expires_in: Some(300),
+            expires_at: Some(expires_at),
+        };
+
+        // At the boundary, should require refresh (now + buffer >= expires_at)
+        assert!(should_refresh_token(&tokens), "Token at buffer boundary should require refresh");
+    }
 }

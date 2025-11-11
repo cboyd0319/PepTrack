@@ -166,6 +166,7 @@ pub struct BackupPreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
 
     #[test]
     fn test_is_gzip_data() {
@@ -177,5 +178,135 @@ mod tests {
 
         let empty = vec![];
         assert!(!is_gzip_data(&empty));
+    }
+
+    #[test]
+    fn test_compression_decompression_round_trip() {
+        use flate2::write::GzEncoder;
+        use flate2::Compression;
+
+        // Create test JSON data
+        let test_data = r#"{"metadata":{"version":"1.0","timestamp":"2025-01-01T00:00:00Z"},"protocols":[],"doseLogs":[],"literature":[]}"#;
+
+        // Compress the data
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(test_data.as_bytes()).unwrap();
+        let compressed = encoder.finish().unwrap();
+
+        // Verify it's detected as gzip
+        assert!(is_gzip_data(&compressed), "Compressed data should be detected as gzip");
+
+        // Decompress using GzDecoder (same as read_backup_file logic)
+        let mut decoder = GzDecoder::new(&compressed[..]);
+        let mut decompressed = String::new();
+        decoder.read_to_string(&mut decompressed).unwrap();
+
+        // Verify round trip
+        assert_eq!(test_data, decompressed, "Decompressed data should match original");
+    }
+
+    #[test]
+    fn test_compression_decompression_large_data() {
+        use flate2::write::GzEncoder;
+        use flate2::Compression;
+
+        // Create larger test data to verify compression actually reduces size
+        let mut test_data = String::from(r#"{"metadata":{"version":"1.0","timestamp":"2025-01-01T00:00:00Z"},"protocols":["#);
+        for i in 0..100 {
+            if i > 0 {
+                test_data.push(',');
+            }
+            test_data.push_str(&format!(r#"{{"id":"protocol-{}","name":"Test Protocol {}","peptideName":"Peptide{}"}}"#, i, i, i));
+        }
+        test_data.push_str(r#"],"doseLogs":[],"literature":[]}"#);
+
+        // Compress the data
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(test_data.as_bytes()).unwrap();
+        let compressed = encoder.finish().unwrap();
+
+        // Verify compression actually reduced size
+        assert!(compressed.len() < test_data.len(), "Compressed size should be smaller than original");
+
+        // Decompress and verify
+        let mut decoder = GzDecoder::new(&compressed[..]);
+        let mut decompressed = String::new();
+        decoder.read_to_string(&mut decompressed).unwrap();
+
+        assert_eq!(test_data, decompressed, "Decompressed data should match original");
+    }
+
+    #[test]
+    fn test_decompression_corrupted_gzip() {
+        // Create corrupted gzip data (valid header but invalid body)
+        let corrupted = vec![0x1f, 0x8b, 0x08, 0x00, 0xff, 0xff, 0xff, 0xff];
+
+        assert!(is_gzip_data(&corrupted), "Should detect as gzip based on header");
+
+        // Attempt to decompress - should fail
+        let mut decoder = GzDecoder::new(&corrupted[..]);
+        let mut decompressed = String::new();
+        let result = decoder.read_to_string(&mut decompressed);
+
+        assert!(result.is_err(), "Decompressing corrupted gzip should fail");
+    }
+
+    #[test]
+    fn test_compression_empty_backup() {
+        use flate2::write::GzEncoder;
+        use flate2::Compression;
+
+        // Empty but valid backup structure
+        let test_data = r#"{"metadata":{"version":"1.0","timestamp":"2025-01-01T00:00:00Z"},"protocols":[],"doseLogs":[],"literature":[]}"#;
+
+        // Compress
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(test_data.as_bytes()).unwrap();
+        let compressed = encoder.finish().unwrap();
+
+        // Decompress
+        let mut decoder = GzDecoder::new(&compressed[..]);
+        let mut decompressed = String::new();
+        decoder.read_to_string(&mut decompressed).unwrap();
+
+        assert_eq!(test_data, decompressed, "Empty backup should compress/decompress correctly");
+    }
+
+    #[test]
+    fn test_compression_different_levels() {
+        use flate2::write::GzEncoder;
+        use flate2::Compression;
+
+        let test_data = "test data ".repeat(1000); // Create some repetitive data
+
+        // Test different compression levels
+        let fast = {
+            let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
+            encoder.write_all(test_data.as_bytes()).unwrap();
+            encoder.finish().unwrap()
+        };
+
+        let default = {
+            let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+            encoder.write_all(test_data.as_bytes()).unwrap();
+            encoder.finish().unwrap()
+        };
+
+        let best = {
+            let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
+            encoder.write_all(test_data.as_bytes()).unwrap();
+            encoder.finish().unwrap()
+        };
+
+        // All should decompress to same data
+        for compressed in [&fast, &default, &best] {
+            let mut decoder = GzDecoder::new(&compressed[..]);
+            let mut decompressed = String::new();
+            decoder.read_to_string(&mut decompressed).unwrap();
+            assert_eq!(test_data, decompressed);
+        }
+
+        // Best compression should generally be smallest (though not guaranteed for all data)
+        assert!(best.len() <= default.len(), "Best compression should be <= default");
     }
 }
