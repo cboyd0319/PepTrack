@@ -3,18 +3,18 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use dirs::data_dir;
-use peptrack_core::{StaticKeyProvider, StorageConfig, StorageManager};
+use peptrack_core::{KeyProvider, StaticKeyProvider, StorageConfig, StorageManager};
 use peptrack_local_ai::{AiClientConfig, LocalAiOrchestrator};
 use rand::rngs::OsRng;
 use rand::RngCore;
 use tracing::{info, warn};
 
 #[cfg(target_os = "macos")]
-use peptrack_core::migrate_file_key_to_keychain;
+use peptrack_core::{migrate_file_key_to_keychain, KeychainKeyProvider};
 
 #[derive(Clone)]
 pub struct AppState {
-    pub storage: Arc<StorageManager<StaticKeyProvider>>,
+    pub storage: Arc<StorageManager>,
     pub ai_client: Arc<LocalAiOrchestrator>,
 }
 
@@ -25,13 +25,13 @@ pub fn build_state() -> Result<AppState> {
     #[cfg(target_os = "macos")]
     attempt_keychain_migration(&data_dir);
 
-    let key = ensure_key_material(&data_dir)?;
-    let key_provider = Arc::new(StaticKeyProvider::new(key)?);
+    // Select key provider: prefer Keychain on macOS, fallback to file-based
+    let key_provider: Arc<dyn KeyProvider> = select_key_provider(&data_dir)?;
 
     let storage = StorageManager::new(StorageConfig {
         data_dir: Some(data_dir),
         db_file_name: None,
-        key_provider: key_provider.clone(),
+        key_provider,
     })?;
     storage.initialize()?;
 
@@ -41,6 +41,44 @@ pub fn build_state() -> Result<AppState> {
         storage: Arc::new(storage),
         ai_client: Arc::new(ai_client),
     })
+}
+
+/// Selects the appropriate key provider for the platform.
+///
+/// On macOS:
+/// - Tries KeychainKeyProvider first
+/// - Falls back to file-based StaticKeyProvider if Keychain fails
+/// - Logs the decision for transparency
+///
+/// On other platforms:
+/// - Always uses file-based StaticKeyProvider
+fn select_key_provider(data_dir: &Path) -> Result<Arc<dyn KeyProvider>> {
+    #[cfg(target_os = "macos")]
+    {
+        // Try Keychain first
+        match KeychainKeyProvider::new() {
+            Ok(provider) => {
+                info!("Using macOS Keychain for encryption key storage");
+                return Ok(Arc::new(provider));
+            }
+            Err(err) => {
+                warn!("Keychain provider unavailable, falling back to file-based storage: {err:#}");
+                // Fall through to file-based provider
+            }
+        }
+    }
+
+    // Fallback: file-based key provider
+    let key = ensure_key_material(data_dir)?;
+    let provider = StaticKeyProvider::new(key)?;
+
+    #[cfg(target_os = "macos")]
+    info!("Using file-based encryption key storage (fallback)");
+
+    #[cfg(not(target_os = "macos"))]
+    info!("Using file-based encryption key storage");
+
+    Ok(Arc::new(provider))
 }
 
 /// Attempts to migrate the file-based encryption key to macOS Keychain.

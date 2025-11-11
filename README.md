@@ -5,7 +5,8 @@ PepTrack is a macOS-first desktop application built with Rust, Tauri, and Vue fo
 ---
 
 ## Current Capabilities (Nov 2025)
-- **Protocol storage:** create/list peptide protocols with notes, vial status, and target concentrations. Records are stored in SQLite (`peptrack.sqlite`) under the user’s Application Support directory and encrypted with ChaCha20-Poly1305 envelope encryption.
+- **Protocol storage:** create/list peptide protocols with notes, vial status, and target concentrations. Records are stored in SQLite (`peptrack.sqlite`) under the user's Application Support directory and encrypted with ChaCha20-Poly1305 envelope encryption.
+- **Supplier & inventory management:** track peptide suppliers with contact info, manage vial inventory with expiry dates, cost tracking, batch/lot numbers, and vial status lifecycle.
 - **Dose logging:** full UI for tracking doses with dates, amounts, and notes. Calendar views and history tracking included.
 - **Backup system:** comprehensive backup and restore functionality with:
   - Manual backups (compressed or uncompressed JSON)
@@ -13,6 +14,7 @@ PepTrack is a macOS-first desktop application built with Rust, Tauri, and Vue fo
   - Google Drive OAuth integration for cloud backups
   - Backup preview and restore with detailed results
   - Automatic backup cleanup with configurable retention policies
+- **macOS Keychain integration:** encryption keys stored in macOS Keychain by default (macOS only), with automatic migration from file-based storage and secure OS-level protection.
 - **Literature search:** integrated search across PubMed, OpenAlex, and Crossref APIs with result caching.
 - **Local AI summarizer:** the Vue panel calls the Tauri command `summarize_text`, which invokes `peptrack-local-ai`. The orchestrator prefers Codex CLI (`gpt-5`), falling back to Claude CLI (`claude-haiku-4-5`), and returns Markdown or JSON summaries.
 - **Notifications:** desktop notifications for backup success/failure with user-configurable preferences and granular controls.
@@ -91,10 +93,11 @@ PepTrack is a macOS-first desktop application built with Rust, Tauri, and Vue fo
 
 ## Data & Security Notes
 - Database path: `~/Library/Application Support/PepTrack/peptrack.sqlite`.
-- Keys: `peptrack.key` holds 32 random bytes in hex; managed by `ensure_key_material`.
+- **Keys (macOS):** Encryption keys are stored in macOS Keychain by default, providing OS-level encryption and access control. Automatic migration from file-based storage on first launch.
+- **Keys (other platforms):** `peptrack.key` holds 32 random bytes in hex; managed by `ensure_key_material`.
 - Encryption: `peptrack-core::EnvelopeEncryption` uses ChaCha20-Poly1305 with unique nonces per record.
 - Logging: Tauri `log` plugin only attaches in debug builds; production builds omit it for privacy.
-- Future work includes migrating to macOS Keychain or Secure Enclave and enforcing per-record metadata authentication.
+- Future work includes Secure Enclave integration and enforcing per-record metadata authentication.
 
 ---
 
@@ -107,8 +110,8 @@ PepTrack is a macOS-first desktop application built with Rust, Tauri, and Vue fo
 ---
 
 ## Roadmap & Next Steps
-1. **Supplier tracking + inventory:** extend the schema (protocol metadata + new tables) and build Vue UI for suppliers, cost-per-mg, and stock alerts.
-2. **macOS Keychain integration:** replace file-based key storage with Keychain-backed secrets and provide migration tooling (see `docs/keychain_migration_plan.md`).
+1. ~~**Supplier tracking + inventory:**~~ ✅ **COMPLETE** - Full supplier and inventory management with vial tracking, expiry dates, cost tracking, and batch/lot numbers.
+2. ~~**macOS Keychain integration:**~~ ✅ **COMPLETE** - Encryption keys now stored in macOS Keychain by default with automatic migration from file-based storage.
 3. **Background reminders:** create a LaunchAgent or Tauri sidecar to surface dose reminders and vial-expiry notifications even when the UI is closed.
 4. **Cloud restore:** add ability to restore backups directly from Google Drive without downloading first.
 5. **Multi-cloud support:** extend backup system to support Dropbox, OneDrive, and other cloud providers.

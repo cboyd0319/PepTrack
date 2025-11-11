@@ -12,13 +12,13 @@ use crate::models::{DoseLog, InventoryItem, LiteratureEntry, PeptideProtocol, Su
 
 const DEFAULT_DB_NAME: &str = "peptrack.sqlite";
 
-pub struct StorageConfig<P: KeyProvider + 'static> {
+pub struct StorageConfig {
     pub data_dir: Option<PathBuf>,
     pub db_file_name: Option<String>,
-    pub key_provider: Arc<P>,
+    pub key_provider: Arc<dyn KeyProvider>,
 }
 
-impl<P: KeyProvider + 'static> StorageConfig<P> {
+impl StorageConfig {
     pub fn resolve_path(&self) -> Result<PathBuf> {
         if let Some(explicit) = &self.data_dir {
             return Ok(explicit.join(self.db_file_name.as_deref().unwrap_or(DEFAULT_DB_NAME)));
@@ -31,13 +31,13 @@ impl<P: KeyProvider + 'static> StorageConfig<P> {
     }
 }
 
-pub struct StorageManager<P: KeyProvider + 'static> {
+pub struct StorageManager {
     db_path: PathBuf,
-    encryption: EnvelopeEncryption<P>,
+    encryption: EnvelopeEncryption,
 }
 
-impl<P: KeyProvider + 'static> StorageManager<P> {
-    pub fn new(config: StorageConfig<P>) -> Result<Self> {
+impl StorageManager {
+    pub fn new(config: StorageConfig) -> Result<Self> {
         let db_path = config.resolve_path()?;
         let encryption = EnvelopeEncryption::new(config.key_provider);
         Ok(Self {

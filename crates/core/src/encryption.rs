@@ -85,13 +85,13 @@ impl KeyMaterial {
 /// ```text
 /// [12-byte nonce][ciphertext + 16-byte auth tag]
 /// ```
-pub struct EnvelopeEncryption<P: KeyProvider + 'static> {
-    key_provider: Arc<P>,
+pub struct EnvelopeEncryption {
+    key_provider: Arc<dyn KeyProvider>,
 }
 
-impl<P: KeyProvider + 'static> EnvelopeEncryption<P> {
+impl EnvelopeEncryption {
     /// Creates a new envelope encryption instance with the given key provider.
-    pub fn new(key_provider: Arc<P>) -> Self {
+    pub fn new(key_provider: Arc<dyn KeyProvider>) -> Self {
         Self { key_provider }
     }
 
