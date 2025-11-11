@@ -441,7 +441,7 @@ onUnmounted(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(entry, index) in history" :key="index" :class="{ 'failed-row': !entry.success }">
+              <tr v-for="entry in history" :key="entry.timestamp" :class="{ 'failed-row': !entry.success }">
                 <td>{{ entry.success ? '✅' : '❌' }}</td>
                 <td>{{ formatTimestamp(entry.timestamp) }}</td>
                 <td>{{ entry.destinations.join(', ') }}</td>

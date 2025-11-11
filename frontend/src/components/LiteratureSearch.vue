@@ -6,13 +6,22 @@
     <!-- Search Form -->
     <div class="search-box">
       <input
+        id="literature-search-input"
         v-model="searchQuery"
         type="text"
         placeholder="What do you want to research? (e.g., BPC-157 wound healing)"
         @keyup.enter="handleSearch"
         class="search-input"
+        aria-label="Search scientific literature"
+        autocomplete="off"
       />
-      <button @click="handleSearch" :disabled="isSearching || !searchQuery.trim()" class="search-btn">
+      <button
+        @click="handleSearch"
+        :disabled="isSearching || !searchQuery.trim()"
+        class="search-btn"
+        aria-label="Search for research papers"
+        :aria-busy="isSearching"
+      >
         {{ isSearching ? 'Finding Papers...' : 'Find Papers' }}
       </button>
     </div>
@@ -49,15 +58,22 @@
     <div class="cached-section">
       <div class="cached-header">
         <h3>Your Saved Papers ({{ cachedLiterature.length }})</h3>
-        <button @click="loadCachedLiterature" class="refresh-btn">↻ Refresh</button>
+        <button
+          @click="loadCachedLiterature"
+          class="refresh-btn"
+          aria-label="Refresh saved papers"
+        >↻ Refresh</button>
       </div>
 
       <input
+        id="cache-search-input"
         v-model="cacheSearchQuery"
         type="text"
         placeholder="Search your saved papers..."
         @input="handleCacheSearch"
         class="search-input"
+        aria-label="Search saved papers"
+        autocomplete="off"
       />
 
       <div v-if="filteredCachedLiterature.length === 0" class="no-results">

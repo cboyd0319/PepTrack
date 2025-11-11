@@ -118,7 +118,13 @@ function getFileName(path: string | null): string {
     <div class="restore-content">
       <!-- File Selection -->
       <div v-if="!selectedFile" class="file-selection">
-        <button @click="selectBackupFile" :disabled="loading" class="select-btn">
+        <button
+          @click="selectBackupFile"
+          :disabled="loading"
+          class="select-btn"
+          aria-label="Select backup file to restore"
+          :aria-busy="loading"
+        >
           {{ loading ? "⏳ Loading..." : "📂 Select Backup File" }}
         </button>
         <p class="helper-text">
@@ -130,7 +136,11 @@ function getFileName(path: string | null): string {
       <div v-if="preview && !restoreResult" class="preview-section">
         <div class="preview-header">
           <h3>📋 Backup Preview</h3>
-          <button @click="reset" class="reset-btn" title="Select a different file">
+          <button
+            @click="reset"
+            class="reset-btn"
+            aria-label="Select a different backup file"
+          >
             ↻ Select Different File
           </button>
         </div>

@@ -1,12 +1,16 @@
 <script setup lang="ts">
+import { withDefaults } from 'vue';
 import type { PeptideProtocol } from "../api/peptrack";
 
 interface Props {
-  protocols: PeptideProtocol[];
-  loading: boolean;
+  protocols?: PeptideProtocol[];
+  loading?: boolean;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  protocols: () => [],
+  loading: false
+});
 const emit = defineEmits<{
   refresh: [];
 }>();
@@ -20,7 +24,12 @@ function handleRefresh() {
   <article class="panel">
     <div class="panel-header">
       <h2>💊 My Peptide Plans</h2>
-      <button @click="handleRefresh" :disabled="props.loading">
+      <button
+        @click="handleRefresh"
+        :disabled="props.loading"
+        aria-label="Refresh protocol list"
+        :aria-busy="props.loading"
+      >
         {{ props.loading ? "↻ Loading..." : "↻ Refresh" }}
       </button>
     </div>

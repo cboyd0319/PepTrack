@@ -73,6 +73,8 @@ async function handleExport() {
         @click="handleExport"
         :disabled="exporting"
         class="export-btn"
+        aria-label="Export backup data to file"
+        :aria-busy="exporting"
       >
         {{ exporting ? "⏳ Creating Backup..." : "📥 Export Backup Now" }}
       </button>
