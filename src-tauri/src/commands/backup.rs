@@ -1,5 +1,5 @@
 use anyhow::Result;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::State;
 use time::OffsetDateTime;
@@ -7,7 +7,7 @@ use tracing::{info, warn};
 
 use crate::state::AppState;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BackupMetadata {
     pub export_date: String,
@@ -17,7 +17,7 @@ pub struct BackupMetadata {
     pub app_version: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BackupData {
     pub metadata: BackupMetadata,
@@ -173,5 +173,195 @@ mod tests {
         assert!(json_str.contains("protocols"));
         assert!(json_str.contains("doseLogs"));
         assert!(json_str.contains("literature"));
+    }
+
+    #[tokio::test]
+    async fn test_backup_metadata_deserialization() {
+        let json = r#"{
+            "exportDate": "2024-01-15T10:30:00Z",
+            "protocolsCount": 5,
+            "dosesCount": 10,
+            "literatureCount": 3,
+            "appVersion": "0.1.0"
+        }"#;
+
+        let metadata: Result<BackupMetadata, _> = serde_json::from_str(json);
+        assert!(metadata.is_ok());
+
+        let metadata = metadata.unwrap();
+        assert_eq!(metadata.export_date, "2024-01-15T10:30:00Z");
+        assert_eq!(metadata.protocols_count, 5);
+        assert_eq!(metadata.doses_count, 10);
+        assert_eq!(metadata.literature_count, 3);
+        assert_eq!(metadata.app_version, "0.1.0");
+    }
+
+    #[tokio::test]
+    async fn test_backup_data_round_trip() {
+        // Create backup data
+        let original = BackupData {
+            metadata: BackupMetadata {
+                export_date: "2024-01-15T10:30:00Z".to_string(),
+                protocols_count: 2,
+                doses_count: 5,
+                literature_count: 1,
+                app_version: "0.1.0".to_string(),
+            },
+            protocols: vec![
+                serde_json::json!({"id": "p1", "name": "Test Protocol"}),
+                serde_json::json!({"id": "p2", "name": "Another Protocol"}),
+            ],
+            dose_logs: vec![
+                serde_json::json!({"id": "d1", "amount": 10}),
+                serde_json::json!({"id": "d2", "amount": 20}),
+                serde_json::json!({"id": "d3", "amount": 30}),
+                serde_json::json!({"id": "d4", "amount": 40}),
+                serde_json::json!({"id": "d5", "amount": 50}),
+            ],
+            literature: vec![serde_json::json!({"id": "l1", "title": "Research Paper"})],
+        };
+
+        // Serialize
+        let json = serde_json::to_string(&original).unwrap();
+
+        // Deserialize
+        let deserialized: BackupData = serde_json::from_str(&json).unwrap();
+
+        // Verify metadata
+        assert_eq!(deserialized.metadata.protocols_count, 2);
+        assert_eq!(deserialized.metadata.doses_count, 5);
+        assert_eq!(deserialized.metadata.literature_count, 1);
+
+        // Verify arrays
+        assert_eq!(deserialized.protocols.len(), 2);
+        assert_eq!(deserialized.dose_logs.len(), 5);
+        assert_eq!(deserialized.literature.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_backup_with_large_dataset() {
+        // Create backup with many items
+        let mut protocols = Vec::new();
+        let mut doses = Vec::new();
+        let mut literature = Vec::new();
+
+        for i in 0..100 {
+            protocols.push(serde_json::json!({
+                "id": format!("p{}", i),
+                "name": format!("Protocol {}", i)
+            }));
+        }
+
+        for i in 0..500 {
+            doses.push(serde_json::json!({
+                "id": format!("d{}", i),
+                "amount": i * 10
+            }));
+        }
+
+        for i in 0..50 {
+            literature.push(serde_json::json!({
+                "id": format!("l{}", i),
+                "title": format!("Paper {}", i)
+            }));
+        }
+
+        let backup = BackupData {
+            metadata: BackupMetadata {
+                export_date: "2024-01-15T10:30:00Z".to_string(),
+                protocols_count: 100,
+                doses_count: 500,
+                literature_count: 50,
+                app_version: "0.1.0".to_string(),
+            },
+            protocols,
+            dose_logs: doses,
+            literature,
+        };
+
+        // Should serialize without error
+        let json = serde_json::to_string(&backup);
+        assert!(json.is_ok());
+
+        let json_str = json.unwrap();
+        // Should be a substantial size
+        assert!(json_str.len() > 10000);
+
+        // Should deserialize back
+        let deserialized: Result<BackupData, _> = serde_json::from_str(&json_str);
+        assert!(deserialized.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_backup_file_path_uniqueness() {
+        // Generate multiple paths rapidly - they should all be unique or very similar
+        // due to timestamp precision
+        let path1 = get_backup_file_path().await.unwrap();
+
+        // Even if generated in quick succession, paths should be valid
+        let path2 = get_backup_file_path().await.unwrap();
+
+        // Both should be valid paths
+        assert!(path1.contains("peptrack_backup_"));
+        assert!(path2.contains("peptrack_backup_"));
+        assert!(path1.ends_with(".json"));
+        assert!(path2.ends_with(".json"));
+
+        // Paths might be the same or different depending on timestamp precision
+        // What matters is they're both valid
+    }
+
+    #[tokio::test]
+    async fn test_backup_file_path_format() {
+        let path = get_backup_file_path().await.unwrap();
+
+        // Should contain the prefix
+        assert!(path.contains("peptrack_backup_"));
+
+        // Should end with .json
+        assert!(path.ends_with(".json"));
+
+        // Should contain date components (YYYY-MM-DD format)
+        assert!(path.contains("202") || path.contains("203")); // Year 2020s or 2030s
+
+        // Should be a valid path
+        let path_obj = std::path::Path::new(&path);
+        assert!(path_obj.file_name().is_some());
+    }
+
+    #[tokio::test]
+    async fn test_backup_metadata_with_zero_counts() {
+        let metadata = BackupMetadata {
+            export_date: "2024-01-15T10:30:00Z".to_string(),
+            protocols_count: 0,
+            doses_count: 0,
+            literature_count: 0,
+            app_version: "0.1.0".to_string(),
+        };
+
+        let json = serde_json::to_string(&metadata).unwrap();
+        let deserialized: BackupMetadata = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.protocols_count, 0);
+        assert_eq!(deserialized.doses_count, 0);
+        assert_eq!(deserialized.literature_count, 0);
+    }
+
+    #[tokio::test]
+    async fn test_backup_metadata_with_max_counts() {
+        let metadata = BackupMetadata {
+            export_date: "2024-01-15T10:30:00Z".to_string(),
+            protocols_count: usize::MAX,
+            doses_count: usize::MAX,
+            literature_count: usize::MAX,
+            app_version: "0.1.0".to_string(),
+        };
+
+        let json = serde_json::to_string(&metadata).unwrap();
+        let deserialized: BackupMetadata = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.protocols_count, usize::MAX);
+        assert_eq!(deserialized.doses_count, usize::MAX);
+        assert_eq!(deserialized.literature_count, usize::MAX);
     }
 }

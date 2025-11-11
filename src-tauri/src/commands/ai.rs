@@ -88,3 +88,199 @@ pub async fn summarize_text(
         output: response.raw_output,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_summarize_payload_serialization() {
+        let json = r#"{
+            "title": "Test Paper",
+            "content": "This is test content",
+            "format": "Markdown"
+        }"#;
+
+        let payload: Result<SummarizePayload, _> = serde_json::from_str(json);
+        assert!(payload.is_ok());
+
+        let payload = payload.unwrap();
+        assert_eq!(payload.title, "Test Paper");
+        assert_eq!(payload.content, "This is test content");
+        assert!(payload.format.is_some());
+    }
+
+    #[test]
+    fn test_summarize_payload_without_format() {
+        let json = r#"{
+            "title": "Test",
+            "content": "Content"
+        }"#;
+
+        let payload: Result<SummarizePayload, _> = serde_json::from_str(json);
+        assert!(payload.is_ok());
+
+        let payload = payload.unwrap();
+        assert_eq!(payload.title, "Test");
+        assert_eq!(payload.content, "Content");
+        assert!(payload.format.is_none());
+    }
+
+    #[test]
+    fn test_summarize_payload_with_json_format() {
+        let json = r#"{
+            "title": "Test",
+            "content": "Content",
+            "format": "Json"
+        }"#;
+
+        let payload: Result<SummarizePayload, _> = serde_json::from_str(json);
+        assert!(payload.is_ok());
+
+        let payload = payload.unwrap();
+        assert!(payload.format.is_some());
+    }
+
+    #[test]
+    fn test_summarize_payload_with_long_content() {
+        let long_content = "a".repeat(10000);
+        let json = format!(
+            r#"{{
+                "title": "Long Paper",
+                "content": "{}"
+            }}"#,
+            long_content
+        );
+
+        let payload: Result<SummarizePayload, _> = serde_json::from_str(&json);
+        assert!(payload.is_ok());
+
+        let payload = payload.unwrap();
+        assert_eq!(payload.content.len(), 10000);
+    }
+
+    #[test]
+    fn test_summarize_payload_with_special_characters() {
+        let json = r#"{
+            "title": "Test & <Special> \"Characters\"",
+            "content": "Content with émojis 🧪 and symbols"
+        }"#;
+
+        let payload: Result<SummarizePayload, _> = serde_json::from_str(json);
+        assert!(payload.is_ok());
+
+        let payload = payload.unwrap();
+        assert!(payload.title.contains("&"));
+        assert!(payload.content.contains("🧪"));
+    }
+
+    #[test]
+    fn test_summarize_result_serialization() {
+        let result = SummarizeResult {
+            provider: "Codex".to_string(),
+            output: "Summary text".to_string(),
+        };
+
+        let json = serde_json::to_string(&result);
+        assert!(json.is_ok());
+
+        let json_str = json.unwrap();
+        assert!(json_str.contains("provider"));
+        assert!(json_str.contains("output"));
+        assert!(json_str.contains("Codex"));
+    }
+
+    #[test]
+    fn test_ai_availability_status_serialization() {
+        let status = AiAvailabilityStatus {
+            codex_available: true,
+            claude_available: false,
+            any_available: true,
+            preferred_provider: Some("Codex (GPT-5)".to_string()),
+        };
+
+        let json = serde_json::to_string(&status);
+        assert!(json.is_ok());
+
+        let json_str = json.unwrap();
+        assert!(json_str.contains("codexAvailable"));
+        assert!(json_str.contains("claudeAvailable"));
+        assert!(json_str.contains("anyAvailable"));
+        assert!(json_str.contains("preferredProvider"));
+    }
+
+    #[test]
+    fn test_ai_availability_status_all_available() {
+        let status = AiAvailabilityStatus {
+            codex_available: true,
+            claude_available: true,
+            any_available: true,
+            preferred_provider: Some("Codex (GPT-5)".to_string()),
+        };
+
+        assert!(status.codex_available);
+        assert!(status.claude_available);
+        assert!(status.any_available);
+        assert!(status.preferred_provider.is_some());
+    }
+
+    #[test]
+    fn test_ai_availability_status_none_available() {
+        let status = AiAvailabilityStatus {
+            codex_available: false,
+            claude_available: false,
+            any_available: false,
+            preferred_provider: None,
+        };
+
+        assert!(!status.codex_available);
+        assert!(!status.claude_available);
+        assert!(!status.any_available);
+        assert!(status.preferred_provider.is_none());
+    }
+
+    #[test]
+    fn test_ai_availability_status_camel_case_conversion() {
+        let status = AiAvailabilityStatus {
+            codex_available: true,
+            claude_available: false,
+            any_available: true,
+            preferred_provider: Some("Codex".to_string()),
+        };
+
+        let json = serde_json::to_string(&status).unwrap();
+
+        // Should convert to camelCase
+        assert!(json.contains("codexAvailable"));
+        assert!(json.contains("claudeAvailable"));
+        assert!(json.contains("anyAvailable"));
+        assert!(json.contains("preferredProvider"));
+
+        // Should NOT contain snake_case
+        assert!(!json.contains("codex_available"));
+        assert!(!json.contains("claude_available"));
+    }
+
+    #[test]
+    fn test_summarize_payload_missing_required_field() {
+        let json = r#"{
+            "title": "Test"
+        }"#;
+
+        let payload: Result<SummarizePayload, _> = serde_json::from_str(json);
+        assert!(payload.is_err());
+    }
+
+    #[test]
+    fn test_summarize_result_debug_format() {
+        let result = SummarizeResult {
+            provider: "Claude".to_string(),
+            output: "Test summary".to_string(),
+        };
+
+        let debug_str = format!("{:?}", result);
+        assert!(debug_str.contains("SummarizeResult"));
+        assert!(debug_str.contains("Claude"));
+        assert!(debug_str.contains("Test summary"));
+    }
+}
