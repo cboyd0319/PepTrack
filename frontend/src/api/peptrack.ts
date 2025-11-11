@@ -147,3 +147,30 @@ export interface AiAvailabilityStatus {
 export async function checkAiAvailability() {
   return invoke<AiAvailabilityStatus>("check_ai_availability");
 }
+
+// Backup types
+
+export interface BackupMetadata {
+  exportDate: string;
+  protocolsCount: number;
+  dosesCount: number;
+  literatureCount: number;
+  appVersion: string;
+}
+
+export interface BackupData {
+  metadata: BackupMetadata;
+  protocols: any[];
+  doseLogs: any[];
+  literature: any[];
+}
+
+// Backup API calls
+
+export async function exportBackupData() {
+  return invoke<BackupData>("export_backup_data");
+}
+
+export async function getBackupFilePath() {
+  return invoke<string>("get_backup_file_path");
+}

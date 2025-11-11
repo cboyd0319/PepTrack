@@ -6,6 +6,7 @@ import AiSummaryPanel from "./components/AiSummaryPanel.vue";
 import LiteratureSearch from "./components/LiteratureSearch.vue";
 import WelcomeScreen from "./components/WelcomeScreen.vue";
 import DoseTracker from "./components/DoseTracker.vue";
+import BackupExport from "./components/BackupExport.vue";
 
 // Welcome screen ref
 const welcomeScreen = ref<InstanceType<typeof WelcomeScreen> | null>(null);
@@ -187,6 +188,10 @@ onMounted(() => {
 
     <section class="literature-section">
       <LiteratureSearch />
+    </section>
+
+    <section class="backup-section">
+      <BackupExport />
     </section>
   </main>
 </template>

@@ -6,6 +6,7 @@ use tracing::info;
 
 use commands::{
     ai::{check_ai_availability, summarize_text},
+    backup::{export_backup_data, get_backup_file_path},
     doses::{delete_dose_log, list_dose_logs, list_dose_logs_for_protocol, log_dose},
     literature::{list_literature, search_cached_literature, search_literature},
     protocols::{list_protocols, save_protocol},
@@ -46,7 +47,9 @@ pub fn run() {
             log_dose,
             list_dose_logs,
             list_dose_logs_for_protocol,
-            delete_dose_log
+            delete_dose_log,
+            export_backup_data,
+            get_backup_file_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
