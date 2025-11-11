@@ -4,17 +4,13 @@
 //! encryption keys using the macOS Keychain Services API, providing OS-level
 //! security and access control.
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use rand::{rngs::OsRng, RngCore};
-use tracing::info;
 
 use crate::encryption::{KeyMaterial, KeyProvider};
 
 #[cfg(target_os = "macos")]
 use security_framework::passwords::{delete_generic_password, get_generic_password, set_generic_password};
-
-const SERVICE_NAME: &str = "com.peptrack.encryption-key";
-const ACCOUNT_NAME: &str = "master-key";
 
 /// Key provider that stores encryption keys in the macOS Keychain.
 ///
@@ -49,6 +45,9 @@ pub struct KeychainKeyProvider {
     service: String,
     account: String,
 }
+
+const SERVICE_NAME: &str = "com.peptrack.encryption-key";
+const ACCOUNT_NAME: &str = "master-key";
 
 impl KeychainKeyProvider {
     /// Creates a new Keychain key provider.
@@ -85,20 +84,18 @@ impl KeychainKeyProvider {
     fn ensure_key_exists(&self) -> Result<()> {
         // Try to load existing key
         if self.load_from_keychain().is_ok() {
-            info!("Loaded existing encryption key from Keychain");
             return Ok(());
         }
 
         // Generate and store new key
-        info!("Generating new encryption key and storing in Keychain");
-        let key = self.generate_key()?;
+        let key = Self::generate_key()?;
         self.store_in_keychain(&key)?;
 
         Ok(())
     }
 
     /// Generates a new 32-byte encryption key.
-    fn generate_key(&self) -> Result<Vec<u8>> {
+    fn generate_key() -> Result<Vec<u8>> {
         let mut key = vec![0u8; 32];
         OsRng.fill_bytes(&mut key);
         Ok(key)
@@ -108,17 +105,14 @@ impl KeychainKeyProvider {
     #[cfg(target_os = "macos")]
     fn store_in_keychain(&self, key: &[u8]) -> Result<()> {
         set_generic_password(&self.service, &self.account, key)
-            .context("Failed to store encryption key in Keychain")?;
-
-        info!("Successfully stored encryption key in Keychain");
-        Ok(())
+            .map_err(|e| anyhow!("Failed to store encryption key in Keychain: {}", e))
     }
 
     /// Loads a key from the macOS Keychain.
     #[cfg(target_os = "macos")]
     fn load_from_keychain(&self) -> Result<Vec<u8>> {
         get_generic_password(&self.service, &self.account)
-            .context("Failed to retrieve encryption key from Keychain")
+            .map_err(|e| anyhow!("Failed to retrieve encryption key from Keychain: {}", e))
     }
 
     /// Deletes the key from the macOS Keychain.
@@ -131,10 +125,7 @@ impl KeychainKeyProvider {
     #[cfg(target_os = "macos")]
     pub fn delete_from_keychain(&self) -> Result<()> {
         delete_generic_password(&self.service, &self.account)
-            .context("Failed to delete encryption key from Keychain")?;
-
-        info!("Successfully deleted encryption key from Keychain");
-        Ok(())
+            .map_err(|e| anyhow!("Failed to delete encryption key from Keychain: {}", e))
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -186,7 +177,6 @@ pub fn migrate_file_key_to_keychain(
     };
 
     if provider.load_from_keychain().is_ok() {
-        info!("Encryption key already exists in Keychain, skipping migration");
         return Ok(false);
     }
 
@@ -207,15 +197,11 @@ pub fn migrate_file_key_to_keychain(
 
     // Store in Keychain
     provider.store_in_keychain(&key_bytes)?;
-    info!("Successfully migrated encryption key from file to Keychain");
 
     // Optionally delete the file
     if delete_file {
         fs::remove_file(file_path)
-            .with_context(|| format!("Failed to delete key file: {}", file_path.display()))?;
-        info!("Deleted old key file: {}", file_path.display());
-    } else {
-        info!("Kept key file as backup: {}", file_path.display());
+            .map_err(|e| anyhow!("Failed to delete key file {}: {}", file_path.display(), e))?;
     }
 
     Ok(true)
@@ -246,6 +232,11 @@ mod tests {
         }
     }
 
+    #[allow(dead_code)]
+    fn generate_test_key() -> Vec<u8> {
+        KeychainKeyProvider::generate_key().unwrap()
+    }
+
     fn cleanup_test_key() {
         let provider = create_test_provider();
         let _ = provider.delete_from_keychain();
@@ -257,7 +248,7 @@ mod tests {
         cleanup_test_key();
 
         let provider = create_test_provider();
-        let key = provider.generate_key().unwrap();
+        let key = KeychainKeyProvider::generate_key().unwrap();
         provider.store_in_keychain(&key).unwrap();
 
         let retrieved = provider.load_from_keychain().unwrap();
@@ -268,8 +259,7 @@ mod tests {
 
     #[test]
     fn keychain_provider_generates_32_byte_keys() {
-        let provider = create_test_provider();
-        let key = provider.generate_key().unwrap();
+        let key = KeychainKeyProvider::generate_key().unwrap();
         assert_eq!(key.len(), 32);
     }
 
@@ -279,7 +269,7 @@ mod tests {
         cleanup_test_key();
 
         let provider = create_test_provider();
-        let key = provider.generate_key().unwrap();
+        let key = KeychainKeyProvider::generate_key().unwrap();
         provider.store_in_keychain(&key).unwrap();
 
         let key_material = provider.key_material().unwrap();
@@ -295,7 +285,7 @@ mod tests {
         cleanup_test_key();
 
         let provider = Arc::new(create_test_provider());
-        let key = provider.generate_key().unwrap();
+        let key = KeychainKeyProvider::generate_key().unwrap();
         provider.store_in_keychain(&key).unwrap();
 
         let encryption = EnvelopeEncryption::new(provider);
@@ -315,7 +305,7 @@ mod tests {
         cleanup_test_key();
 
         let provider = create_test_provider();
-        let key = provider.generate_key().unwrap();
+        let key = KeychainKeyProvider::generate_key().unwrap();
         provider.store_in_keychain(&key).unwrap();
 
         // Verify key exists

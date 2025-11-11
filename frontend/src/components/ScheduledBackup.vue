@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, onUnmounted, computed } from "vue";
 import {
   getBackupSchedule,
   updateBackupSchedule,
@@ -196,18 +196,34 @@ function formatTimestamp(timestamp: string): string {
   }
 }
 
+let progressInterval: number | null = null;
+
 onMounted(() => {
   loadSchedule();
   loadHistory();
   loadProgress();
 
-  // Poll progress every 2 seconds when backup is running
-  setInterval(async () => {
-    await loadProgress();
-    if (progress.value?.isRunning) {
-      await loadHistory();
+  // Poll progress every 2 seconds when backup is running  // Use flag to prevent overlapping requests
+  let isPolling = false;
+  progressInterval = setInterval(async () => {
+    if (isPolling) return;
+    isPolling = true;
+    try {
+      await loadProgress();
+      if (progress.value?.isRunning) {
+        await loadHistory();
+      }
+    } finally {
+      isPolling = false;
     }
   }, 2000);
+});
+
+onUnmounted(() => {
+  if (progressInterval) {
+    clearInterval(progressInterval);
+    progressInterval = null;
+  }
 });
 </script>
 

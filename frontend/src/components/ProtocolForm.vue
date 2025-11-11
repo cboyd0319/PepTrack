@@ -13,6 +13,10 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   submit: [];
+  'update:name': [value: string];
+  'update:peptideName': [value: string];
+  'update:notes': [value: string];
+  'update:targetConcentration': [value: string | number];
 }>();
 
 function handleSubmit() {
@@ -28,12 +32,13 @@ function handleSubmit() {
     <form class="form-stack" @submit.prevent="handleSubmit">
       <label>
         Plan Name
-        <input v-model="props.form.name" type="text" placeholder="e.g., Morning Routine, Recovery Plan" />
+        <input :value="props.form.name" @input="emit('update:name', ($event.target as HTMLInputElement).value)" type="text" placeholder="e.g., Morning Routine, Recovery Plan" />
       </label>
       <label>
         Which Peptide?
         <input
-          v-model="props.form.peptideName"
+          :value="props.form.peptideName"
+          @input="emit('update:peptideName', ($event.target as HTMLInputElement).value)"
           type="text"
           placeholder="e.g., BPC-157, TB-500"
         />
@@ -41,7 +46,8 @@ function handleSubmit() {
       <label>
         Strength (optional)
         <input
-          v-model="props.form.targetConcentration"
+          :value="props.form.targetConcentration"
+          @input="emit('update:targetConcentration', ($event.target as HTMLInputElement).value)"
           type="number"
           min="0"
           step="0.01"
@@ -51,7 +57,8 @@ function handleSubmit() {
       <label>
         Notes (optional)
         <textarea
-          v-model="props.form.notes"
+          :value="props.form.notes"
+          @input="emit('update:notes', ($event.target as HTMLTextAreaElement).value)"
           rows="3"
           placeholder="Where you bought it, how to mix it, storage instructions, etc."
         />
