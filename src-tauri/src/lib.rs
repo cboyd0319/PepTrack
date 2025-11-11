@@ -19,6 +19,11 @@ use commands::{
         get_backup_history, get_backup_progress, get_backup_schedule, trigger_manual_backup,
         update_backup_schedule, SchedulerState,
     },
+    suppliers::{
+        create_inventory_item, create_supplier, delete_inventory_item, delete_supplier,
+        get_inventory_item, get_supplier, list_inventory, list_inventory_by_protocol,
+        list_suppliers, update_inventory_item, update_supplier,
+    },
 };
 use state::build_state;
 
@@ -101,7 +106,20 @@ pub fn run() {
             update_backup_schedule,
             trigger_manual_backup,
             restore_from_backup,
-            preview_backup
+            preview_backup,
+            // Supplier commands
+            create_supplier,
+            list_suppliers,
+            get_supplier,
+            update_supplier,
+            delete_supplier,
+            // Inventory commands
+            create_inventory_item,
+            list_inventory,
+            list_inventory_by_protocol,
+            get_inventory_item,
+            update_inventory_item,
+            delete_inventory_item
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -49,4 +49,4 @@ pub mod models;
 pub use db::{StorageConfig, StorageManager};
 pub use encryption::{EnvelopeEncryption, KeyMaterial, KeyProvider, StaticKeyProvider};
 pub use keychain::{migrate_file_key_to_keychain, KeychainKeyProvider};
-pub use models::{DoseLog, LiteratureEntry, PeptideProtocol};
+pub use models::{DoseLog, InventoryItem, LiteratureEntry, PeptideProtocol, Supplier, VialStatus};

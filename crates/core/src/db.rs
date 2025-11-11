@@ -8,7 +8,7 @@ use time::OffsetDateTime;
 use tracing::info;
 
 use crate::encryption::{EnvelopeEncryption, KeyProvider};
-use crate::models::{DoseLog, LiteratureEntry, PeptideProtocol};
+use crate::models::{DoseLog, InventoryItem, LiteratureEntry, PeptideProtocol, Supplier};
 
 const DEFAULT_DB_NAME: &str = "peptrack.sqlite";
 
@@ -77,6 +77,21 @@ impl<P: KeyProvider + 'static> StorageManager<P> {
                 source TEXT NOT NULL,
                 payload BLOB NOT NULL,
                 indexed_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS suppliers (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                payload BLOB NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS inventory (
+                id TEXT PRIMARY KEY,
+                protocol_id TEXT NOT NULL REFERENCES protocols(id) ON DELETE CASCADE,
+                supplier_id TEXT REFERENCES suppliers(id) ON DELETE SET NULL,
+                payload BLOB NOT NULL,
+                updated_at TEXT NOT NULL
             );
             "#,
         )
@@ -252,6 +267,142 @@ impl<P: KeyProvider + 'static> StorageManager<P> {
             .collect())
     }
 
+    // Supplier CRUD operations
+
+    pub fn upsert_supplier(&self, supplier: &Supplier) -> Result<()> {
+        let conn = self.open_connection()?;
+        let payload = serde_json::to_vec(supplier).context("Failed to serialize supplier")?;
+        let encrypted = self.encryption.seal(&payload)?;
+
+        conn.execute(
+            r#"
+            INSERT INTO suppliers (id, name, payload, updated_at)
+            VALUES (?1, ?2, ?3, ?4)
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                payload = excluded.payload,
+                updated_at = excluded.updated_at;
+            "#,
+            params![
+                supplier.id,
+                supplier.name,
+                encrypted,
+                supplier.updated_at.to_string()
+            ],
+        )
+        .context("Failed to upsert supplier")?;
+
+        Ok(())
+    }
+
+    pub fn list_suppliers(&self) -> Result<Vec<Supplier>> {
+        let conn = self.open_connection()?;
+        let mut stmt = conn.prepare("SELECT payload FROM suppliers ORDER BY name ASC")?;
+        let mut rows = stmt.query([]).context("Unable to run supplier list query")?;
+        let mut suppliers = Vec::new();
+        while let Some(row) = rows.next()? {
+            let blob: Vec<u8> = row.get(0)?;
+            suppliers.push(self.decode_supplier(&blob)?);
+        }
+        Ok(suppliers)
+    }
+
+    pub fn get_supplier(&self, supplier_id: &str) -> Result<Option<Supplier>> {
+        let conn = self.open_connection()?;
+        let mut stmt = conn.prepare("SELECT payload FROM suppliers WHERE id = ?1")?;
+        let mut rows = stmt.query(params![supplier_id])?;
+
+        if let Some(row) = rows.next()? {
+            let blob: Vec<u8> = row.get(0)?;
+            Ok(Some(self.decode_supplier(&blob)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn delete_supplier(&self, supplier_id: &str) -> Result<()> {
+        let conn = self.open_connection()?;
+        conn.execute("DELETE FROM suppliers WHERE id = ?1", params![supplier_id])
+            .context("Failed to delete supplier")?;
+        Ok(())
+    }
+
+    // Inventory CRUD operations
+
+    pub fn upsert_inventory_item(&self, item: &InventoryItem) -> Result<()> {
+        let conn = self.open_connection()?;
+        let payload = serde_json::to_vec(item).context("Failed to serialize inventory item")?;
+        let encrypted = self.encryption.seal(&payload)?;
+
+        conn.execute(
+            r#"
+            INSERT INTO inventory (id, protocol_id, supplier_id, payload, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5)
+            ON CONFLICT(id) DO UPDATE SET
+                protocol_id = excluded.protocol_id,
+                supplier_id = excluded.supplier_id,
+                payload = excluded.payload,
+                updated_at = excluded.updated_at;
+            "#,
+            params![
+                item.id,
+                item.protocol_id,
+                item.supplier_id,
+                encrypted,
+                item.updated_at.to_string()
+            ],
+        )
+        .context("Failed to upsert inventory item")?;
+
+        Ok(())
+    }
+
+    pub fn list_inventory(&self) -> Result<Vec<InventoryItem>> {
+        let conn = self.open_connection()?;
+        let mut stmt = conn.prepare("SELECT payload FROM inventory ORDER BY updated_at DESC")?;
+        let mut rows = stmt.query([]).context("Unable to run inventory list query")?;
+        let mut items = Vec::new();
+        while let Some(row) = rows.next()? {
+            let blob: Vec<u8> = row.get(0)?;
+            items.push(self.decode_inventory_item(&blob)?);
+        }
+        Ok(items)
+    }
+
+    pub fn list_inventory_by_protocol(&self, protocol_id: &str) -> Result<Vec<InventoryItem>> {
+        let conn = self.open_connection()?;
+        let mut stmt = conn.prepare("SELECT payload FROM inventory WHERE protocol_id = ?1 ORDER BY updated_at DESC")?;
+        let mut rows = stmt.query(params![protocol_id]).context("Unable to run inventory query for protocol")?;
+        let mut items = Vec::new();
+        while let Some(row) = rows.next()? {
+            let blob: Vec<u8> = row.get(0)?;
+            items.push(self.decode_inventory_item(&blob)?);
+        }
+        Ok(items)
+    }
+
+    pub fn get_inventory_item(&self, item_id: &str) -> Result<Option<InventoryItem>> {
+        let conn = self.open_connection()?;
+        let mut stmt = conn.prepare("SELECT payload FROM inventory WHERE id = ?1")?;
+        let mut rows = stmt.query(params![item_id])?;
+
+        if let Some(row) = rows.next()? {
+            let blob: Vec<u8> = row.get(0)?;
+            Ok(Some(self.decode_inventory_item(&blob)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn delete_inventory_item(&self, item_id: &str) -> Result<()> {
+        let conn = self.open_connection()?;
+        conn.execute("DELETE FROM inventory WHERE id = ?1", params![item_id])
+            .context("Failed to delete inventory item")?;
+        Ok(())
+    }
+
+    // Decode helper functions
+
     fn decode_protocol(&self, blob: &[u8]) -> Result<PeptideProtocol> {
         let decrypted = self.encryption.open(blob)?;
         let protocol: PeptideProtocol =
@@ -271,6 +422,20 @@ impl<P: KeyProvider + 'static> StorageManager<P> {
         let log: DoseLog =
             serde_json::from_slice(&decrypted).context("Failed to deserialize dose log")?;
         Ok(log)
+    }
+
+    fn decode_supplier(&self, blob: &[u8]) -> Result<Supplier> {
+        let decrypted = self.encryption.open(blob)?;
+        let supplier: Supplier =
+            serde_json::from_slice(&decrypted).context("Failed to deserialize supplier")?;
+        Ok(supplier)
+    }
+
+    fn decode_inventory_item(&self, blob: &[u8]) -> Result<InventoryItem> {
+        let decrypted = self.encryption.open(blob)?;
+        let item: InventoryItem =
+            serde_json::from_slice(&decrypted).context("Failed to deserialize inventory item")?;
+        Ok(item)
     }
 }
 

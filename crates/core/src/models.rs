@@ -79,3 +79,82 @@ impl LiteratureEntry {
         }
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Supplier {
+    pub id: String,
+    pub name: String,
+    pub contact_email: Option<String>,
+    pub contact_phone: Option<String>,
+    pub website: Option<String>,
+    pub notes: Option<String>,
+    pub created_at: OffsetDateTime,
+    pub updated_at: OffsetDateTime,
+}
+
+impl Supplier {
+    pub fn new<S: Into<String>>(name: S) -> Self {
+        let now = now_timestamp();
+        Self {
+            id: Uuid::new_v4().to_string(),
+            name: name.into(),
+            contact_email: None,
+            contact_phone: None,
+            website: None,
+            notes: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum VialStatus {
+    Sealed,
+    Opened,
+    Empty,
+    Expired,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InventoryItem {
+    pub id: String,
+    pub protocol_id: String,
+    pub supplier_id: Option<String>,
+    pub vial_number: Option<String>,
+    pub vial_status: VialStatus,
+    pub purchase_date: Option<OffsetDateTime>,
+    pub expiry_date: Option<OffsetDateTime>,
+    pub cost_per_mg: Option<f32>,
+    pub quantity_mg: Option<f32>,
+    pub concentration_mg_ml: Option<f32>,
+    pub batch_number: Option<String>,
+    pub lot_number: Option<String>,
+    pub notes: Option<String>,
+    pub created_at: OffsetDateTime,
+    pub updated_at: OffsetDateTime,
+}
+
+impl InventoryItem {
+    pub fn new<S: Into<String>>(protocol_id: S) -> Self {
+        let now = now_timestamp();
+        Self {
+            id: Uuid::new_v4().to_string(),
+            protocol_id: protocol_id.into(),
+            supplier_id: None,
+            vial_number: None,
+            vial_status: VialStatus::Sealed,
+            purchase_date: None,
+            expiry_date: None,
+            cost_per_mg: None,
+            quantity_mg: None,
+            concentration_mg_ml: None,
+            batch_number: None,
+            lot_number: None,
+            notes: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+}

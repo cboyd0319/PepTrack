@@ -6,3 +6,4 @@ pub mod literature;
 pub mod protocols;
 pub mod restore;
 pub mod scheduler_v2;
+pub mod suppliers;

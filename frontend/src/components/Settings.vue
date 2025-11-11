@@ -5,8 +5,10 @@ import GoogleDriveBackup from "./GoogleDriveBackup.vue";
 import BackupExport from "./BackupExport.vue";
 import RestoreBackup from "./RestoreBackup.vue";
 import NotificationPreferences from "./NotificationPreferences.vue";
+import SupplierManagement from "./SupplierManagement.vue";
+import InventoryManagement from "./InventoryManagement.vue";
 
-type Tab = "scheduled" | "drive" | "backup" | "restore" | "notifications";
+type Tab = "scheduled" | "drive" | "backup" | "restore" | "notifications" | "suppliers" | "inventory";
 
 const activeTab = ref<Tab>("scheduled");
 
@@ -15,6 +17,8 @@ const tabs = [
   { id: "drive" as Tab, label: "☁️ Google Drive", description: "Cloud backup setup" },
   { id: "backup" as Tab, label: "💾 Manual Backup", description: "Export data manually" },
   { id: "restore" as Tab, label: "📥 Restore", description: "Restore from backup" },
+  { id: "suppliers" as Tab, label: "🏢 Suppliers", description: "Manage suppliers and vendors" },
+  { id: "inventory" as Tab, label: "📦 Inventory", description: "Track peptide vials and stock" },
   { id: "notifications" as Tab, label: "🔔 Notifications", description: "Alert preferences" },
 ];
 
@@ -87,6 +91,14 @@ function handleTestNotification() {
 
           <div v-else-if="activeTab === 'restore'" key="restore" class="tab-panel">
             <RestoreBackup />
+          </div>
+
+          <div v-else-if="activeTab === 'suppliers'" key="suppliers" class="tab-panel">
+            <SupplierManagement />
+          </div>
+
+          <div v-else-if="activeTab === 'inventory'" key="inventory" class="tab-panel">
+            <InventoryManagement />
           </div>
 
           <div v-else-if="activeTab === 'notifications'" key="notifications" class="tab-panel">
