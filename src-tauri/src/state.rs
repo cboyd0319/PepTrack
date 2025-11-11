@@ -7,6 +7,10 @@ use peptrack_core::{StaticKeyProvider, StorageConfig, StorageManager};
 use peptrack_local_ai::{AiClientConfig, LocalAiOrchestrator};
 use rand::rngs::OsRng;
 use rand::RngCore;
+use tracing::{info, warn};
+
+#[cfg(target_os = "macos")]
+use peptrack_core::migrate_file_key_to_keychain;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -16,6 +20,11 @@ pub struct AppState {
 
 pub fn build_state() -> Result<AppState> {
     let data_dir = resolve_data_dir()?;
+
+    // Attempt to migrate file key to Keychain on macOS (non-blocking)
+    #[cfg(target_os = "macos")]
+    attempt_keychain_migration(&data_dir);
+
     let key = ensure_key_material(&data_dir)?;
     let key_provider = Arc::new(StaticKeyProvider::new(key)?);
 
@@ -32,6 +41,32 @@ pub fn build_state() -> Result<AppState> {
         storage: Arc::new(storage),
         ai_client: Arc::new(ai_client),
     })
+}
+
+/// Attempts to migrate the file-based encryption key to macOS Keychain.
+///
+/// This is best-effort and will not fail the application if it doesn't succeed.
+/// The key file is kept as a backup even after successful migration.
+#[cfg(target_os = "macos")]
+fn attempt_keychain_migration(data_dir: &Path) {
+    let key_file = data_dir.join("peptrack.key");
+
+    if !key_file.exists() {
+        return;
+    }
+
+    match migrate_file_key_to_keychain(&key_file, false) {
+        Ok(true) => {
+            info!("Successfully migrated encryption key to macOS Keychain");
+            info!("File key kept as backup at: {}", key_file.display());
+        }
+        Ok(false) => {
+            info!("Encryption key already exists in Keychain");
+        }
+        Err(err) => {
+            warn!("Failed to migrate key to Keychain (continuing with file): {err:#}");
+        }
+    }
 }
 
 fn resolve_data_dir() -> Result<PathBuf> {
