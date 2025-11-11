@@ -1,120 +1,392 @@
-# PepTrack – Professional Peptide Management & Local AI Research Notes
+# PepTrack – Professional Peptide Management & Research Platform
 
-PepTrack is a macOS-first desktop application built with Rust, Tauri, and Vue for securely tracking peptide protocols while leveraging on-device AI CLIs for literature summarization. All domain data stays local: protocols, dose logs, and cached literature are encrypted before touching disk, and summaries are generated via developer-installed Codex/Claude CLIs—no cloud calls from the app itself.
+**A secure, privacy-first desktop application for peptide protocol tracking, dose logging, and research management.**
+
+PepTrack is a macOS-first desktop application built with Rust, Tauri, and Vue 3, featuring military-grade encryption, local AI integration, and comprehensive backup capabilities. All data stays local and encrypted—no cloud dependency required.
 
 ---
 
-## Current Capabilities (Nov 2025)
-- **Protocol storage:** create/list peptide protocols with notes, vial status, and target concentrations. Records are stored in SQLite (`peptrack.sqlite`) under the user's Application Support directory and encrypted with ChaCha20-Poly1305 envelope encryption.
-- **Supplier & inventory management:** track peptide suppliers with contact info, manage vial inventory with expiry dates, cost tracking, batch/lot numbers, and vial status lifecycle.
-- **Dose logging:** full UI for tracking doses with dates, amounts, and notes. Calendar views and history tracking included.
-- **Backup system:** comprehensive backup and restore functionality with:
-  - Manual backups (compressed or uncompressed JSON)
-  - Scheduled automatic backups (hourly, daily, weekly)
+## 🎯 Current Capabilities
+
+### Core Features
+- **Protocol Management** - Create and manage peptide protocols with detailed tracking
+- **Dose Logging** - Complete dose tracking with calendar views and history
+- **Supplier & Inventory** - Track suppliers, manage vial inventory with expiry dates and batch tracking
+- **Literature Search** - Integrated search across PubMed, OpenAlex, and Crossref APIs
+- **Local AI Summaries** - Generate research summaries using local Codex or Claude CLI
+- **Comprehensive Backup System**:
+  - Manual and scheduled automatic backups (hourly/daily/weekly)
   - Google Drive OAuth integration for cloud backups
-  - Backup preview and restore with detailed results
-  - Automatic backup cleanup with configurable retention policies
-- **macOS Keychain integration:** encryption keys stored in macOS Keychain by default (macOS only), with automatic migration from file-based storage and secure OS-level protection.
-- **Literature search:** integrated search across PubMed, OpenAlex, and Crossref APIs with result caching.
-- **Local AI summarizer:** the Vue panel calls the Tauri command `summarize_text`, which invokes `peptrack-local-ai`. The orchestrator prefers Codex CLI (`gpt-5`), falling back to Claude CLI (`claude-haiku-4-5`), and returns Markdown or JSON summaries.
-- **Notifications:** desktop notifications for backup success/failure with user-configurable preferences and granular controls.
-- **Error handling:** intelligent error detection with user-friendly toast notifications and contextual suggestions for resolution.
-- **Zero telemetry:** no outbound requests are made unless the user's CLI tools do so.
+  - Backup compression, preview, and restore functionality
+  - Automatic cleanup with configurable retention policies
+- **Desktop Notifications** - Configurable notifications for backup events
+- **Enterprise-Grade Security**:
+  - ChaCha20-Poly1305 envelope encryption for all data
+  - macOS Keychain integration for encryption keys
+  - Automatic key migration from file-based storage
+  - Zero telemetry or tracking
 
 ---
 
-## Architecture Overview
+## 🏗️ Architecture Overview
+
+### System Architecture
+
+```mermaid
+graph TB
+    subgraph "Frontend Layer"
+        Vue[Vue 3 SPA<br/>TypeScript + Vite]
+        Pinia[Pinia State Management<br/>5 Stores]
+        Components[Vue Components<br/>18 Components]
+    end
+
+    subgraph "Tauri Bridge"
+        IPC[Tauri IPC Layer<br/>~40 Commands]
+        Plugins[Tauri Plugins<br/>Log, Notification, Dialog]
+    end
+
+    subgraph "Backend Layer"
+        Commands[Command Handlers<br/>11 Modules]
+        AppState[Application State<br/>Storage + AI Client]
+    end
+
+    subgraph "Core Libraries"
+        Core[peptrack-core<br/>Storage + Encryption]
+        LocalAI[peptrack-local-ai<br/>CLI Orchestrator]
+        Literature[peptrack-literature<br/>API Fetchers]
+    end
+
+    subgraph "Data & External"
+        SQLite[(SQLite Database<br/>Encrypted)]
+        Keychain[macOS Keychain<br/>Key Storage]
+        APIs[External APIs<br/>PubMed, OpenAlex,<br/>Crossref, Google Drive]
+    end
+
+    Vue --> Pinia
+    Pinia --> Components
+    Components --> IPC
+    IPC --> Commands
+    Commands --> AppState
+    AppState --> Core
+    AppState --> LocalAI
+    Commands --> Literature
+    Core --> SQLite
+    Core --> Keychain
+    Literature --> APIs
+    Commands --> APIs
 ```
-┌──────────────┐        ┌──────────────────────────────┐        ┌────────────────────────┐
-│  Vue 3 / Vite│<--IPC-->│ Tauri shell (src-tauri)       │<--API-->│ peptrack-core (Rust)   │
-│  frontend    │        │  - Commands: list/save/summarize│      │  - SQLite + encryption │
-└──────────────┘        │  - App state + key mgmt       │        └────────────────────────┘
-                         │                                      ┌────────────────────────┐
-                         └──────────────────────────────────────>│ peptrack-local-ai crate│
-                                                                │  - Codex/Claude CLI     │
-                                                                └────────────────────────┘
+
+### Data Flow Architecture
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Vue as Vue Component
+    participant Store as Pinia Store
+    participant IPC as Tauri IPC
+    participant Cmd as Command Handler
+    participant Core as Core Library
+    participant DB as SQLite (Encrypted)
+
+    User->>Vue: Create Protocol
+    Vue->>Store: createProtocol(payload)
+    Store->>Store: Optimistic Update
+    Store->>IPC: invoke("save_protocol")
+    IPC->>Cmd: save_protocol(payload)
+    Cmd->>Core: upsert_protocol(data)
+    Core->>Core: Encrypt with ChaCha20
+    Core->>DB: INSERT encrypted blob
+    DB-->>Core: Success
+    Core-->>Cmd: Return protocol
+    Cmd-->>IPC: Return protocol
+    IPC-->>Store: Protocol created
+    Store->>Vue: Update UI
+    Vue->>User: Show success toast
+
+    Note over Store,Vue: On error: rollback<br/>optimistic update
+```
+
+### Encryption Pipeline
+
+```mermaid
+flowchart LR
+    A[Raw Data<br/>JSON] --> B[Serialize to String]
+    B --> C[Generate Random<br/>12-byte Nonce]
+    C --> D[Get 32-byte Key<br/>from Keychain]
+    D --> E[ChaCha20-Poly1305<br/>Encrypt]
+    E --> F[Prepend Nonce<br/>to Ciphertext]
+    F --> G[Store as BLOB<br/>in SQLite]
+
+    G --> H[Read BLOB<br/>from SQLite]
+    H --> I[Extract Nonce<br/>first 12 bytes]
+    I --> J[Get Key<br/>from Keychain]
+    J --> K[ChaCha20-Poly1305<br/>Decrypt]
+    K --> L[Deserialize<br/>from String]
+    L --> M[Rust Struct<br/>Decrypted Data]
+
+    style E fill:#ff6b6b
+    style K fill:#51cf66
 ```
 
 ---
 
-## Tech Stack & Tooling
-- **Rust** `1.91.1` (see `rust-toolchain.toml`) with `rustfmt`, `clippy`, and `cargo-tauri 2.9.4`.
-- **Tauri** `2.9.2`, `tauri-build 2.5.1`, `tauri-plugin-log 2.7.1`.
-- **Frontend:** Vue `3.5.24`, Vite `7.2`, TypeScript `5.9`.
-- **Crypto:** `chacha20poly1305 0.11.0-rc.2`, envelope keys persisted at `~/Library/Application Support/PepTrack/peptrack.key`.
-- **Local AI:** optional Codex CLI (default) and Claude Code CLI fallback, both detected via `which`.
+## 💻 Tech Stack
+
+### Backend (Rust)
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| **Rust** | 1.91.1 | Core application language |
+| **Tauri** | 2.9.2 | Desktop app framework |
+| **SQLite** | bundled | Local encrypted database |
+| **ChaCha20-Poly1305** | 0.11.0-rc.2 | AEAD encryption |
+| **Tokio** | 1.41.1 | Async runtime |
+| **Reqwest** | 0.12 | HTTP client |
+| **OAuth2** | 4.4 | Google Drive authentication |
+| **Security-framework** | 2.11 | macOS Keychain integration |
+
+### Frontend (Vue 3)
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| **Vue** | 3.5.24 | UI framework |
+| **Vite** | 7.2 | Build tool & dev server |
+| **TypeScript** | 5.9 | Type-safe JavaScript |
+| **Pinia** | 3.0.4 | State management |
+| **@vueuse/core** | 14.0.0 | Composition utilities |
+| **Vitest** | 2.1.4 | Component testing |
+
+### External APIs
+- **PubMed** - Biomedical literature database
+- **OpenAlex** - Scholarly works catalog
+- **Crossref** - DOI metadata service
+- **Google Drive** - OAuth 2.0 cloud backup
 
 ---
 
-## Repository Layout
+## 📁 Repository Structure
+
 ```
-.
-├── frontend/                # Vue UI + Vite config
-│   ├── src/App.vue          # Entry screen wiring feature panels together
-│   ├── src/components/      # ProtocolList, ProtocolForm, AiSummaryPanel
-│   ├── src/api/             # Tauri invoke helpers
-│   └── vitest.config.ts     # Component/unit test config
-├── src-tauri/               # Tauri shell & commands
-│   ├── src/lib.rs           # Builder + plugin wiring
-│   ├── src/state.rs         # AppState bootstrap + key mgmt
-│   └── src/commands/        # IPC handlers (protocols.rs, ai.rs)
-├── crates/
-│   ├── core/                # Storage manager, models, ChaCha20-Poly1305 encryption
-│   └── local-ai/            # Codex/Claude CLI orchestrator + CLI parsing
-├── docs/                  # Contributor notes (future-self guide, agent handbook)
-└── AGENTS.md              # Quick contributor checklist
+PepTrack/
+├── frontend/                      # Vue 3 + Vite SPA
+│   ├── src/
+│   │   ├── App.vue               # Main application
+│   │   ├── components/           # 18 Vue components
+│   │   ├── stores/               # 5 Pinia stores
+│   │   ├── composables/          # Vue composables
+│   │   ├── api/                  # Tauri IPC wrappers
+│   │   └── utils/                # Helper functions
+│   ├── package.json              # Node dependencies
+│   └── vitest.config.ts          # Test configuration
+│
+├── src-tauri/                     # Tauri application shell
+│   ├── src/
+│   │   ├── lib.rs               # App initialization
+│   │   ├── state.rs             # AppState bootstrap
+│   │   └── commands/            # 11 IPC command modules
+│   │       ├── protocols.rs     # Protocol CRUD
+│   │       ├── doses.rs         # Dose logging
+│   │       ├── suppliers.rs     # Supplier & inventory
+│   │       ├── ai.rs            # AI summarization
+│   │       ├── literature.rs    # Literature search
+│   │       ├── backup.rs        # Manual backups
+│   │       ├── restore.rs       # Restore functionality
+│   │       ├── scheduler_v2.rs  # Scheduled backups
+│   │       └── drive.rs         # Google Drive OAuth
+│   ├── Cargo.toml               # Rust dependencies
+│   └── tauri.conf.json          # Tauri configuration
+│
+├── crates/                        # Rust library crates
+│   ├── core/                     # Core functionality
+│   │   └── src/
+│   │       ├── db.rs            # SQLite StorageManager
+│   │       ├── models.rs        # Domain types
+│   │       ├── encryption.rs    # ChaCha20-Poly1305
+│   │       ├── keychain.rs      # macOS Keychain
+│   │       └── backup_encryption.rs
+│   │
+│   ├── local-ai/                 # Local AI integration
+│   │   └── src/
+│   │       └── lib.rs           # Codex/Claude orchestrator
+│   │
+│   └── literature/               # Literature APIs
+│       └── src/
+│           ├── pubmed.rs        # PubMed integration
+│           ├── openalex.rs      # OpenAlex integration
+│           └── crossref.rs      # Crossref integration
+│
+├── docs/                         # Technical documentation
+│   ├── ARCHITECTURE.md          # Detailed architecture guide
+│   ├── future_self.md           # Developer onboarding
+│   └── ai_assistant_persona.md  # AI collaboration guide
+│
+├── README.md                     # This file
+├── SETUP.md                      # User setup guide
+├── TESTING.md                    # Testing scenarios
+└── Cargo.toml                    # Workspace manifest
 ```
 
 ---
 
-## Getting Started
-1. **Install prerequisites**
-   - `rustup default 1.91.1 && rustup component add rustfmt clippy`
-   - Node.js ≥ 22 (project uses 25.1.0 locally)
-   - `cargo install tauri-cli --version 2.9.4`
-   - Optional: Codex CLI & Claude Code CLI if you want AI summaries to work.
-2. **Install frontend deps**
+## 🚀 Getting Started
+
+### Prerequisites
+
+1. **Rust Toolchain**
    ```bash
-   cd frontend && npm install
+   rustup default 1.91.1
+   rustup component add rustfmt clippy
+   cargo install tauri-cli --version 2.9.4
    ```
-3. **Run in development**
+
+2. **Node.js** (≥ 22)
+   ```bash
+   node -v  # Should be 22+
+   ```
+
+3. **Optional: AI CLIs** (for summarization features)
+   ```bash
+   # Option 1: Codex CLI (recommended)
+   npm install -g codex-cli
+
+   # Option 2: Claude CLI (fallback)
+   curl https://code.claude.com/install.sh | bash
+   ```
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/your-username/PepTrack.git
+   cd PepTrack
+   ```
+
+2. **Install frontend dependencies**
+   ```bash
+   cd frontend
+   npm install
+   cd ..
+   ```
+
+3. **Run in development mode**
    ```bash
    cargo tauri dev
    ```
-4. **Test & lint**
-   ```bash
-   cargo fmt && cargo clippy --workspace
-   cargo test --workspace
-   (cd frontend && npm run build)
-   (cd frontend && npm run test -- --run)
-   ```
+
+### Development Workflow
+
+```bash
+# Format code
+cargo fmt
+
+# Lint with clippy
+cargo clippy --workspace --all-targets
+
+# Run Rust tests
+cargo test --workspace
+
+# Build frontend
+cd frontend && npm run build
+
+# Run frontend tests
+cd frontend && npm run test -- --run
+
+# Build production release
+cargo tauri build
+```
 
 ---
 
-## Data & Security Notes
-- Database path: `~/Library/Application Support/PepTrack/peptrack.sqlite`.
-- **Keys (macOS):** Encryption keys are stored in macOS Keychain by default, providing OS-level encryption and access control. Automatic migration from file-based storage on first launch.
-- **Keys (other platforms):** `peptrack.key` holds 32 random bytes in hex; managed by `ensure_key_material`.
-- Encryption: `peptrack-core::EnvelopeEncryption` uses ChaCha20-Poly1305 with unique nonces per record.
-- Logging: Tauri `log` plugin only attaches in debug builds; production builds omit it for privacy.
-- Future work includes Secure Enclave integration and enforcing per-record metadata authentication.
+## 🔒 Data & Security
+
+### Data Storage
+- **Location**: `~/Library/Application Support/PepTrack/`
+- **Database**: `peptrack.sqlite` (encrypted)
+- **Encryption Keys**: Stored in macOS Keychain (primary) or `peptrack.key` (fallback)
+
+### Encryption Details
+- **Algorithm**: ChaCha20-Poly1305 (AEAD)
+- **Key Size**: 32 bytes (256-bit)
+- **Nonce**: 12 bytes, randomly generated per record
+- **Key Storage**: macOS Keychain with automatic migration from file-based storage
+
+### Privacy Guarantees
+- ✅ All data encrypted at rest
+- ✅ No telemetry or analytics
+- ✅ No cloud sync without explicit user action
+- ✅ No data leaves your computer except:
+  - Research searches to PubMed/OpenAlex/Crossref (search queries only)
+  - AI summaries to your local CLI (your credentials)
+  - Google Drive backups to YOUR Google Drive (optional, user-initiated)
 
 ---
 
-## Local AI Orchestrator
-- `peptrack-local-ai` detects CLI binaries during startup.
-- The orchestrator walks a priority chain (Codex → Claude by default) and streams prompts via stdin/stdout.
-- Responses are parsed from CLI JSON; if parsing fails, raw stdout is returned so the UI still shows something.
-- Extendable to additional providers by implementing `LocalAiClient`.
+## 📚 Documentation
+
+- **[SETUP.md](SETUP.md)** - Complete setup guide for optional features
+- **[TESTING.md](TESTING.md)** - Comprehensive testing scenarios
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Detailed architecture documentation
+- **[docs/future_self.md](docs/future_self.md)** - Developer onboarding guide
 
 ---
 
-## Roadmap & Next Steps
-1. ~~**Supplier tracking + inventory:**~~ ✅ **COMPLETE** - Full supplier and inventory management with vial tracking, expiry dates, cost tracking, and batch/lot numbers.
-2. ~~**macOS Keychain integration:**~~ ✅ **COMPLETE** - Encryption keys now stored in macOS Keychain by default with automatic migration from file-based storage.
-3. **Background reminders:** create a LaunchAgent or Tauri sidecar to surface dose reminders and vial-expiry notifications even when the UI is closed.
-4. **Cloud restore:** add ability to restore backups directly from Google Drive without downloading first.
-5. **Multi-cloud support:** extend backup system to support Dropbox, OneDrive, and other cloud providers.
-6. **Backup encryption:** add optional encryption for backup files at rest with user-managed passwords.
+## 🗺️ Roadmap
 
-For contributor workflows and day-to-day commands, see `AGENTS.md` and `docs/peptrack_future_self.md`.
+### Completed ✅
+- ✅ Protocol management with full CRUD operations
+- ✅ Dose logging with calendar views
+- ✅ Supplier & inventory management
+- ✅ Literature search (PubMed, OpenAlex, Crossref)
+- ✅ Local AI summarization (Codex/Claude)
+- ✅ Manual and scheduled backups
+- ✅ Google Drive OAuth integration
+- ✅ macOS Keychain integration
+- ✅ Desktop notifications
+- ✅ Comprehensive error handling
+
+### In Progress 🚧
+- Background reminders for dose schedules
+- Vial expiry notifications
+
+### Planned 📋
+- Cloud restore (restore directly from Google Drive)
+- Multi-cloud support (Dropbox, OneDrive)
+- Backup encryption with user-managed passwords
+- Dashboard with usage analytics
+- Data export (CSV/JSON)
+- Keyboard shortcuts for power users
+
+---
+
+## 🤝 Contributing
+
+### Quick Start for Contributors
+
+1. Read [docs/future_self.md](docs/future_self.md) for environment setup
+2. Check [TESTING.md](TESTING.md) for testing requirements
+3. Follow the coding standards in [docs/ai_assistant_persona.md](docs/ai_assistant_persona.md)
+
+### Development Guidelines
+
+- **Rust**: Follow Rust 2021 edition best practices, use `anyhow` for errors
+- **Vue/TypeScript**: Use Composition API, 2-space indent, PascalCase components
+- **Testing**: All new features require tests
+- **Documentation**: Update relevant docs with any changes
+
+---
+
+## 📄 License
+
+[Add your license here]
+
+---
+
+## 🙏 Acknowledgments
+
+Built with:
+- [Tauri](https://tauri.app/) - Desktop app framework
+- [Vue.js](https://vuejs.org/) - Progressive JavaScript framework
+- [Rust](https://www.rust-lang.org/) - Systems programming language
+- [Pinia](https://pinia.vuejs.org/) - Vue state management
+
+---
+
+**PepTrack** - Your peptides, your data, your control. 🧪
