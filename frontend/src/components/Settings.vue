@@ -213,12 +213,10 @@ function handleTestNotification() {
 
 /* Sidebar Layout */
 .settings-layout {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  display: flex;
   gap: 24px;
   align-items: start;
   width: 100%;
-  overflow: hidden;
 }
 
 /* Sidebar */
@@ -231,6 +229,10 @@ function handleTestNotification() {
   top: 20px;
   max-height: calc(100vh - 100px);
   overflow-y: auto;
+  width: 280px;
+  min-width: 280px;
+  max-width: 280px;
+  flex-shrink: 0;
 }
 
 .sidebar-section {
@@ -309,8 +311,9 @@ function handleTestNotification() {
 
 /* Content Area */
 .content-area {
+  flex: 1;
+  min-width: 0;
   min-height: 600px;
-  max-width: 100%;
   overflow-x: hidden;
 }
 
