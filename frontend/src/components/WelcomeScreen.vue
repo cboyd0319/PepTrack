@@ -30,6 +30,17 @@
           <h3>Your Privacy Matters</h3>
           <p>Everything you save is encrypted and stays on your computer. No accounts, no cloud servers, no tracking.</p>
         </div>
+
+        <div class="welcome-step ai-setup-section">
+          <div class="step-icon">⚙️</div>
+          <h3>Optional: AI Summaries</h3>
+          <p>The AI Summary Helper is <strong>completely optional</strong>. If you want to use it, you'll need to install either:</p>
+          <ul class="ai-options">
+            <li><strong>Codex CLI</strong> (uses GPT-5) - <a href="https://developers.openai.com/codex/cli" target="_blank">Install Guide</a></li>
+            <li><strong>Claude CLI</strong> (uses Haiku 4.5) - <a href="https://code.claude.com/docs/en/cli-reference" target="_blank">Install Guide</a></li>
+          </ul>
+          <p class="ai-note">Don't worry if you skip this - everything else in PepTrack works perfectly without AI!</p>
+        </div>
       </div>
 
       <div class="welcome-footer">
@@ -219,6 +230,47 @@ function closeWelcome() {
   cursor: pointer;
   width: 18px;
   height: 18px;
+}
+
+.ai-setup-section {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 10px;
+}
+
+.ai-options {
+  text-align: left;
+  margin: 15px auto;
+  max-width: 400px;
+  padding-left: 20px;
+}
+
+.ai-options li {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+
+.ai-options a {
+  color: #42b983;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.ai-options a:hover {
+  text-decoration: underline;
+}
+
+.ai-note {
+  font-size: 13px;
+  color: #666;
+  font-style: italic;
+  margin-top: 12px;
+  background: #fffbea;
+  padding: 8px 12px;
+  border-radius: 4px;
+  border-left: 3px solid #f39c12;
 }
 
 /* Mobile responsive */

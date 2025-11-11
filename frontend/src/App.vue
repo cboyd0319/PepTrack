@@ -9,6 +9,10 @@ import DoseTracker from "./components/DoseTracker.vue";
 
 // Welcome screen ref
 const welcomeScreen = ref<InstanceType<typeof WelcomeScreen> | null>(null);
+
+// Connectivity status
+const isOnline = ref(navigator.onLine);
+
 import type {
   PeptideProtocol,
   SummaryFormat,
@@ -113,8 +117,17 @@ function showHelp() {
   welcomeScreen.value?.open();
 }
 
+// Network status detection
+function updateOnlineStatus() {
+  isOnline.value = navigator.onLine;
+}
+
 onMounted(() => {
   refreshProtocols();
+
+  // Listen for connectivity changes
+  window.addEventListener('online', updateOnlineStatus);
+  window.addEventListener('offline', updateOnlineStatus);
 });
 </script>
 
@@ -130,9 +143,19 @@ onMounted(() => {
             Keep track of your peptides and research - all stored privately on your computer.
           </p>
         </div>
-        <button @click="showHelp" class="help-btn" title="Show help and welcome info">
-          ❓ Help
-        </button>
+        <div class="header-actions">
+          <div class="status-indicators">
+            <span v-if="isOnline" class="status-badge online" title="Connected to internet">
+              🌐 Online
+            </span>
+            <span v-else class="status-badge offline" title="No internet connection">
+              ⚠️ Offline
+            </span>
+          </div>
+          <button @click="showHelp" class="help-btn" title="Show help and welcome info">
+            ❓ Help
+          </button>
+        </div>
       </div>
     </header>
 
@@ -199,10 +222,55 @@ onMounted(() => {
   transform: translateY(0);
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-indicators {
+  display: flex;
+  gap: 8px;
+}
+
+.status-badge {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-badge.online {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.status-badge.offline {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
 @media (max-width: 768px) {
   .header-content {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .header-actions {
+    justify-content: space-between;
   }
 
   .help-btn {
