@@ -28,14 +28,18 @@ function loadPreferences() {
 
 // Save preferences to localStorage
 function savePreferences() {
-  const prefs = {
-    enabled: notificationsEnabled.value,
-    onSuccess: notifyOnSuccess.value,
-    onFailure: notifyOnFailure.value,
-    onScheduledBackup: notifyOnScheduledBackup.value,
-    onManualBackup: notifyOnManualBackup.value,
-  };
-  localStorage.setItem("notification_preferences", JSON.stringify(prefs));
+  try {
+    const prefs = {
+      enabled: notificationsEnabled.value,
+      onSuccess: notifyOnSuccess.value,
+      onFailure: notifyOnFailure.value,
+      onScheduledBackup: notifyOnScheduledBackup.value,
+      onManualBackup: notifyOnManualBackup.value,
+    };
+    localStorage.setItem("notification_preferences", JSON.stringify(prefs));
+  } catch (error) {
+    console.warn('Failed to save notification preferences to localStorage:', error);
+  }
 }
 
 // Watch for changes and save

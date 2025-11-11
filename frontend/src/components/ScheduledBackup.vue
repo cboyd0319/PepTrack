@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from "vue";
+import { showErrorToast, showSuccessToast } from "../utils/errorHandling";
 import {
   getBackupSchedule,
   updateBackupSchedule,
@@ -117,16 +118,16 @@ async function loadSchedule() {
 async function loadHistory() {
   try {
     history.value = await getBackupHistory();
-  } catch (err) {
-    console.error("Failed to load history:", err);
+  } catch (error: unknown) {
+    showErrorToast(error, { operation: 'load backup history' });
   }
 }
 
 async function loadProgress() {
   try {
     progress.value = await getBackupProgress();
-  } catch (err) {
-    console.error("Failed to load progress:", err);
+  } catch (error: unknown) {
+    showErrorToast(error, { operation: 'load backup progress' });
   }
 }
 
@@ -338,12 +339,12 @@ onUnmounted(() => {
       <div class="setting-row">
         <label class="setting-label">🗑️ Old Backup Cleanup</label>
 
-        <div class="cleanup-options">
+        <div class="cleanup-options" v-if="schedule.cleanupSettings">
           <label>
             Keep last N backups:
             <input
               type="number"
-              v-model.number="schedule.cleanupSettings!.keepLastN"
+              v-model.number="schedule.cleanupSettings.keepLastN"
               min="1"
               max="100"
               class="small-input"
@@ -355,7 +356,7 @@ onUnmounted(() => {
             Delete backups older than (days):
             <input
               type="number"
-              v-model.number="schedule.cleanupSettings!.olderThanDays"
+              v-model.number="schedule.cleanupSettings.olderThanDays"
               min="1"
               max="365"
               class="small-input"

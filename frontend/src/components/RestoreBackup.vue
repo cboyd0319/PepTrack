@@ -98,6 +98,12 @@ function formatDate(dateStr: string): string {
     return dateStr;
   }
 }
+
+function getFileName(path: string | null): string {
+  if (!path) return '';
+  // Split by both forward and back slashes for cross-platform compatibility
+  return path.split(/[\\/]/).pop() || path;
+}
 </script>
 
 <template>
@@ -132,7 +138,7 @@ function formatDate(dateStr: string): string {
         <div class="preview-card">
           <div class="preview-row">
             <span class="preview-label">📁 File:</span>
-            <span class="preview-value filename">{{ selectedFile?.split('/').pop() || selectedFile }}</span>
+            <span class="preview-value filename">{{ getFileName(selectedFile) }}</span>
           </div>
           <div class="preview-row">
             <span class="preview-label">📅 Backup Date:</span>

@@ -120,6 +120,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { showErrorToast, showSuccessToast } from '../utils/errorHandling';
 import {
   logDose,
   listDoseLogs,
@@ -155,9 +156,8 @@ onMounted(async () => {
 async function loadProtocols() {
   try {
     protocols.value = await listProtocols();
-  } catch (e: any) {
-    console.error('Failed to load protocols:', e);
-    error.value = 'Could not load your peptide plans. Please try again.';
+  } catch (error: unknown) {
+    showErrorToast(error, { operation: 'load protocols' });
   }
 }
 
@@ -169,9 +169,8 @@ async function loadDoses() {
     } else {
       doses.value = await listDoseLogs();
     }
-  } catch (e: any) {
-    console.error('Failed to load doses:', e);
-    error.value = 'Could not load dose history. Please try again.';
+  } catch (error: unknown) {
+    showErrorToast(error, { operation: 'load dose history' });
   }
 }
 
@@ -187,7 +186,7 @@ async function handleLogDose() {
 
   try {
     await logDose(form.value);
-    successMessage.value = 'Dose logged successfully!';
+    showSuccessToast('Dose logged successfully!');
 
     // Reset form
     form.value = {
@@ -199,14 +198,8 @@ async function handleLogDose() {
 
     // Reload doses
     await loadDoses();
-
-    // Clear success message after 3 seconds
-    setTimeout(() => {
-      successMessage.value = null;
-    }, 3000);
-  } catch (e: any) {
-    console.error('Failed to log dose:', e);
-    error.value = 'Could not save dose. Please try again.';
+  } catch (error: unknown) {
+    showErrorToast(error, { operation: 'log dose' });
   } finally {
     isLogging.value = false;
   }
@@ -220,13 +213,9 @@ async function deleteDose(logId: string) {
   try {
     await deleteDoseLog(logId);
     await loadDoses();
-    successMessage.value = 'Dose deleted.';
-    setTimeout(() => {
-      successMessage.value = null;
-    }, 2000);
-  } catch (e: any) {
-    console.error('Failed to delete dose:', e);
-    error.value = 'Could not delete dose. Please try again.';
+    showSuccessToast('Dose deleted successfully');
+  } catch (error: unknown) {
+    showErrorToast(error, { operation: 'delete dose' });
   }
 }
 
