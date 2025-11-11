@@ -14,13 +14,19 @@ use commands::{
     },
     literature::{list_literature, search_cached_literature, search_literature},
     protocols::{list_protocols, save_protocol},
-    scheduler::{get_backup_schedule, trigger_manual_backup, update_backup_schedule, SchedulerState},
+    restore::{preview_backup, restore_from_backup},
+    scheduler_v2::{
+        get_backup_history, get_backup_progress, get_backup_schedule, trigger_manual_backup,
+        update_backup_schedule, SchedulerState,
+    },
 };
 use state::build_state;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -39,6 +45,13 @@ pub fn run() {
 
             let scheduler_state = SchedulerState::new();
             let state_arc = std::sync::Arc::new(state);
+
+            // Store app handle for notifications
+            let scheduler_clone_handle = scheduler_state.clone();
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                scheduler_clone_handle.set_app_handle(app_handle).await;
+            });
 
             // Load schedule from disk
             let scheduler_clone = scheduler_state.clone();
@@ -83,8 +96,12 @@ pub fn run() {
             disconnect_drive,
             upload_to_drive,
             get_backup_schedule,
+            get_backup_history,
+            get_backup_progress,
             update_backup_schedule,
-            trigger_manual_backup
+            trigger_manual_backup,
+            restore_from_backup,
+            preview_backup
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

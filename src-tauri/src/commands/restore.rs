@@ -1,0 +1,181 @@
+use anyhow::{Context, Result};
+use flate2::read::GzDecoder;
+use std::io::Read;
+use tauri::State;
+use tracing::{info, warn};
+
+use crate::commands::backup::BackupData;
+use crate::state::AppState;
+
+/// Restore data from a backup file
+#[tauri::command]
+pub async fn restore_from_backup(
+    state: State<'_, AppState>,
+    file_path: String,
+) -> Result<RestoreResult, String> {
+    info!("Restoring from backup: {}", file_path);
+
+    // Read and parse backup file
+    let backup_data = read_backup_file(&file_path)
+        .map_err(|e| format!("Failed to read backup file: {}", e))?;
+
+    // Validate backup
+    if backup_data.protocols.is_empty() && backup_data.dose_logs.is_empty() && backup_data.literature.is_empty() {
+        return Err("Backup file appears to be empty".to_string());
+    }
+
+    let mut restored_counts = RestoreCounts {
+        protocols: 0,
+        dose_logs: 0,
+        literature: 0,
+    };
+
+    // Restore protocols
+    for protocol_value in backup_data.protocols {
+        match serde_json::from_value::<peptrack_core::PeptideProtocol>(protocol_value) {
+            Ok(protocol) => {
+                if let Err(e) = state.storage.upsert_protocol(&protocol) {
+                    warn!("Failed to restore protocol: {:#}", e);
+                } else {
+                    restored_counts.protocols += 1;
+                }
+            }
+            Err(e) => {
+                warn!("Failed to deserialize protocol: {:#}", e);
+            }
+        }
+    }
+
+    // Restore dose logs
+    for dose_value in backup_data.dose_logs {
+        match serde_json::from_value::<peptrack_core::DoseLog>(dose_value) {
+            Ok(dose) => {
+                if let Err(e) = state.storage.append_dose_log(&dose) {
+                    warn!("Failed to restore dose log: {:#}", e);
+                } else {
+                    restored_counts.dose_logs += 1;
+                }
+            }
+            Err(e) => {
+                warn!("Failed to deserialize dose log: {:#}", e);
+            }
+        }
+    }
+
+    // Restore literature
+    for lit_value in backup_data.literature {
+        match serde_json::from_value::<peptrack_core::LiteratureEntry>(lit_value) {
+            Ok(literature) => {
+                if let Err(e) = state.storage.cache_literature(&literature) {
+                    warn!("Failed to restore literature: {:#}", e);
+                } else {
+                    restored_counts.literature += 1;
+                }
+            }
+            Err(e) => {
+                warn!("Failed to deserialize literature: {:#}", e);
+            }
+        }
+    }
+
+    info!(
+        "Restore complete: {} protocols, {} doses, {} literature",
+        restored_counts.protocols, restored_counts.dose_logs, restored_counts.literature
+    );
+
+    Ok(RestoreResult {
+        success: true,
+        counts: restored_counts,
+        metadata: backup_data.metadata,
+    })
+}
+
+/// Preview backup file contents without restoring
+#[tauri::command]
+pub async fn preview_backup(file_path: String) -> Result<BackupPreview, String> {
+    info!("Previewing backup: {}", file_path);
+
+    let backup_data = read_backup_file(&file_path)
+        .map_err(|e| format!("Failed to read backup file: {}", e))?;
+
+    Ok(BackupPreview {
+        metadata: backup_data.metadata,
+        protocols_count: backup_data.protocols.len(),
+        dose_logs_count: backup_data.dose_logs.len(),
+        literature_count: backup_data.literature.len(),
+    })
+}
+
+// Helper functions
+
+fn read_backup_file(file_path: &str) -> Result<BackupData> {
+    let data = std::fs::read(file_path)
+        .with_context(|| format!("Failed to read file: {}", file_path))?;
+
+    // Try to detect if compressed
+    let is_gzipped = file_path.ends_with(".gz") || is_gzip_data(&data);
+
+    let json = if is_gzipped {
+        let mut decoder = GzDecoder::new(&data[..]);
+        let mut json = String::new();
+        decoder.read_to_string(&mut json)
+            .context("Failed to decompress backup file")?;
+        json
+    } else {
+        String::from_utf8(data)
+            .context("Backup file is not valid UTF-8")?
+    };
+
+    let backup: BackupData = serde_json::from_str(&json)
+        .context("Failed to parse backup file as JSON")?;
+
+    Ok(backup)
+}
+
+fn is_gzip_data(data: &[u8]) -> bool {
+    data.len() >= 2 && data[0] == 0x1f && data[1] == 0x8b
+}
+
+// Response types
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreResult {
+    pub success: bool,
+    pub counts: RestoreCounts,
+    pub metadata: crate::commands::backup::BackupMetadata,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreCounts {
+    pub protocols: usize,
+    pub dose_logs: usize,
+    pub literature: usize,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupPreview {
+    pub metadata: crate::commands::backup::BackupMetadata,
+    pub protocols_count: usize,
+    pub dose_logs_count: usize,
+    pub literature_count: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_gzip_data() {
+        let gzip_header = vec![0x1f, 0x8b, 0x08, 0x00];
+        assert!(is_gzip_data(&gzip_header));
+
+        let json_data = b"{\"test\": \"data\"}";
+        assert!(!is_gzip_data(json_data));
+
+        let empty = vec![];
+        assert!(!is_gzip_data(&empty));
+    }
+}

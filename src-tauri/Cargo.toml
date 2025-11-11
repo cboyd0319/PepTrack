@@ -22,6 +22,8 @@ serde_json = { workspace = true }
 log = "0.4"
 tauri = { version = "2.9.2", features = ["native-tls"] }
 tauri-plugin-log = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-dialog = "2"
 peptrack-core = { path = "../crates/core" }
 peptrack-local-ai = { path = "../crates/local-ai" }
 peptrack-literature = { path = "../crates/literature" }
@@ -36,3 +38,6 @@ time = { version = "0.3.37", features = ["macros", "serde"] }
 oauth2 = "4.4"
 url = "2.5"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+flate2 = "1.0"
+fslock = "0.2"
+base64 = "0.22"
