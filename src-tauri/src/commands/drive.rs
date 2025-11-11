@@ -30,7 +30,7 @@ pub struct DriveTokens {
 }
 
 /// Drive connection status
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DriveStatus {
     pub connected: bool,
@@ -38,7 +38,7 @@ pub struct DriveStatus {
 }
 
 /// OAuth authorization URL response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthUrlResponse {
     pub auth_url: String,
@@ -372,4 +372,335 @@ async fn upload_file(
         .and_then(|i| i.as_str())
         .map(|s| s.to_string())
         .context("Failed to get file ID")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_drive_oauth_config_serialization() {
+        let config = DriveOAuthConfig {
+            client_id: "test-client-id".to_string(),
+            client_secret: "test-secret".to_string(),
+        };
+
+        let json = serde_json::to_string(&config);
+        assert!(json.is_ok());
+
+        let json_str = json.unwrap();
+        assert!(json_str.contains("clientId"));
+        assert!(json_str.contains("clientSecret"));
+        assert!(json_str.contains("test-client-id"));
+    }
+
+    #[test]
+    fn test_drive_oauth_config_deserialization() {
+        let json = r#"{
+            "clientId": "my-client-id",
+            "clientSecret": "my-secret"
+        }"#;
+
+        let config: Result<DriveOAuthConfig, _> = serde_json::from_str(json);
+        assert!(config.is_ok());
+
+        let config = config.unwrap();
+        assert_eq!(config.client_id, "my-client-id");
+        assert_eq!(config.client_secret, "my-secret");
+    }
+
+    #[test]
+    fn test_drive_oauth_config_round_trip() {
+        let original = DriveOAuthConfig {
+            client_id: "abc123".to_string(),
+            client_secret: "secret456".to_string(),
+        };
+
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: DriveOAuthConfig = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(original.client_id, deserialized.client_id);
+        assert_eq!(original.client_secret, deserialized.client_secret);
+    }
+
+    #[test]
+    fn test_drive_tokens_serialization() {
+        let tokens = DriveTokens {
+            access_token: "ya29.test_token".to_string(),
+            refresh_token: Some("refresh_token_123".to_string()),
+            expires_in: Some(3600),
+        };
+
+        let json = serde_json::to_string(&tokens);
+        assert!(json.is_ok());
+
+        let json_str = json.unwrap();
+        assert!(json_str.contains("accessToken"));
+        assert!(json_str.contains("refreshToken"));
+        assert!(json_str.contains("expiresIn"));
+    }
+
+    #[test]
+    fn test_drive_tokens_deserialization() {
+        let json = r#"{
+            "accessToken": "token123",
+            "refreshToken": "refresh456",
+            "expiresIn": 3600
+        }"#;
+
+        let tokens: Result<DriveTokens, _> = serde_json::from_str(json);
+        assert!(tokens.is_ok());
+
+        let tokens = tokens.unwrap();
+        assert_eq!(tokens.access_token, "token123");
+        assert_eq!(tokens.refresh_token, Some("refresh456".to_string()));
+        assert_eq!(tokens.expires_in, Some(3600));
+    }
+
+    #[test]
+    fn test_drive_tokens_without_refresh_token() {
+        let json = r#"{
+            "accessToken": "token123",
+            "expiresIn": 3600
+        }"#;
+
+        let tokens: Result<DriveTokens, _> = serde_json::from_str(json);
+        assert!(tokens.is_ok());
+
+        let tokens = tokens.unwrap();
+        assert_eq!(tokens.access_token, "token123");
+        assert_eq!(tokens.refresh_token, None);
+        assert_eq!(tokens.expires_in, Some(3600));
+    }
+
+    #[test]
+    fn test_drive_tokens_without_expiry() {
+        let json = r#"{
+            "accessToken": "token123",
+            "refreshToken": "refresh456"
+        }"#;
+
+        let tokens: Result<DriveTokens, _> = serde_json::from_str(json);
+        assert!(tokens.is_ok());
+
+        let tokens = tokens.unwrap();
+        assert_eq!(tokens.access_token, "token123");
+        assert_eq!(tokens.refresh_token, Some("refresh456".to_string()));
+        assert_eq!(tokens.expires_in, None);
+    }
+
+    #[test]
+    fn test_drive_tokens_minimal() {
+        let json = r#"{
+            "accessToken": "token123"
+        }"#;
+
+        let tokens: Result<DriveTokens, _> = serde_json::from_str(json);
+        assert!(tokens.is_ok());
+
+        let tokens = tokens.unwrap();
+        assert_eq!(tokens.access_token, "token123");
+        assert_eq!(tokens.refresh_token, None);
+        assert_eq!(tokens.expires_in, None);
+    }
+
+    #[test]
+    fn test_drive_status_connected_serialization() {
+        let status = DriveStatus {
+            connected: true,
+            email: Some("user@example.com".to_string()),
+        };
+
+        let json = serde_json::to_string(&status);
+        assert!(json.is_ok());
+
+        let json_str = json.unwrap();
+        assert!(json_str.contains("connected"));
+        assert!(json_str.contains("email"));
+        assert!(json_str.contains("user@example.com"));
+    }
+
+    #[test]
+    fn test_drive_status_disconnected() {
+        let status = DriveStatus {
+            connected: false,
+            email: None,
+        };
+
+        let json = serde_json::to_string(&status).unwrap();
+        assert!(json.contains("\"connected\":false"));
+    }
+
+    #[test]
+    fn test_auth_url_response_serialization() {
+        let response = AuthUrlResponse {
+            auth_url: "https://accounts.google.com/o/oauth2/v2/auth?...".to_string(),
+            state: "random_state_token".to_string(),
+        };
+
+        let json = serde_json::to_string(&response);
+        assert!(json.is_ok());
+
+        let json_str = json.unwrap();
+        assert!(json_str.contains("authUrl"));
+        assert!(json_str.contains("state"));
+        assert!(json_str.contains("accounts.google.com"));
+    }
+
+    #[test]
+    fn test_drive_oauth_config_with_long_credentials() {
+        let config = DriveOAuthConfig {
+            client_id: "x".repeat(1000),
+            client_secret: "y".repeat(1000),
+        };
+
+        let json = serde_json::to_string(&config);
+        assert!(json.is_ok());
+
+        let deserialized: DriveOAuthConfig = serde_json::from_str(&json.unwrap()).unwrap();
+        assert_eq!(deserialized.client_id.len(), 1000);
+        assert_eq!(deserialized.client_secret.len(), 1000);
+    }
+
+    #[test]
+    fn test_drive_tokens_with_special_characters() {
+        let tokens = DriveTokens {
+            access_token: "token_with-special.chars/123".to_string(),
+            refresh_token: Some("refresh+token=abc".to_string()),
+            expires_in: Some(7200),
+        };
+
+        let json = serde_json::to_string(&tokens).unwrap();
+        let deserialized: DriveTokens = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(tokens.access_token, deserialized.access_token);
+        assert_eq!(tokens.refresh_token, deserialized.refresh_token);
+    }
+
+    #[test]
+    fn test_drive_status_with_special_email() {
+        let status = DriveStatus {
+            connected: true,
+            email: Some("user+tag@sub.example.com".to_string()),
+        };
+
+        let json = serde_json::to_string(&status).unwrap();
+        assert!(json.contains("user+tag@sub.example.com"));
+    }
+
+    #[test]
+    fn test_drive_tokens_clone() {
+        let tokens = DriveTokens {
+            access_token: "token1".to_string(),
+            refresh_token: Some("refresh1".to_string()),
+            expires_in: Some(3600),
+        };
+
+        let cloned = tokens.clone();
+        assert_eq!(tokens.access_token, cloned.access_token);
+        assert_eq!(tokens.refresh_token, cloned.refresh_token);
+        assert_eq!(tokens.expires_in, cloned.expires_in);
+    }
+
+    #[test]
+    fn test_drive_oauth_config_clone() {
+        let config = DriveOAuthConfig {
+            client_id: "id1".to_string(),
+            client_secret: "secret1".to_string(),
+        };
+
+        let cloned = config.clone();
+        assert_eq!(config.client_id, cloned.client_id);
+        assert_eq!(config.client_secret, cloned.client_secret);
+    }
+
+    #[test]
+    fn test_oauth_state_default() {
+        let state = OAuthState::default();
+        // Should create without panicking
+        assert!(state.csrf_token.try_lock().is_ok());
+        assert!(state.pkce_verifier.try_lock().is_ok());
+    }
+
+    #[test]
+    fn test_drive_tokens_expiry_edge_cases() {
+        // Zero expiry
+        let tokens = DriveTokens {
+            access_token: "token".to_string(),
+            refresh_token: None,
+            expires_in: Some(0),
+        };
+        let json = serde_json::to_string(&tokens).unwrap();
+        let deserialized: DriveTokens = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.expires_in, Some(0));
+
+        // Very large expiry
+        let tokens = DriveTokens {
+            access_token: "token".to_string(),
+            refresh_token: None,
+            expires_in: Some(u64::MAX),
+        };
+        let json = serde_json::to_string(&tokens).unwrap();
+        let deserialized: DriveTokens = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.expires_in, Some(u64::MAX));
+    }
+
+    #[test]
+    fn test_drive_oauth_config_empty_strings() {
+        let config = DriveOAuthConfig {
+            client_id: String::new(),
+            client_secret: String::new(),
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: DriveOAuthConfig = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.client_id, "");
+        assert_eq!(deserialized.client_secret, "");
+    }
+
+    #[test]
+    fn test_drive_tokens_debug_format() {
+        let tokens = DriveTokens {
+            access_token: "secret_token".to_string(),
+            refresh_token: Some("secret_refresh".to_string()),
+            expires_in: Some(3600),
+        };
+
+        let debug_str = format!("{:?}", tokens);
+        assert!(debug_str.contains("DriveTokens"));
+        // Note: In production, we might want to redact tokens in debug output
+    }
+
+    #[test]
+    fn test_auth_url_response_with_query_params() {
+        let response = AuthUrlResponse {
+            auth_url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=123&redirect_uri=http://localhost&scope=drive.file".to_string(),
+            state: "csrf_token_12345".to_string(),
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        let deserialized: AuthUrlResponse = serde_json::from_str(&json).unwrap();
+
+        assert!(deserialized.auth_url.contains("client_id"));
+        assert!(deserialized.auth_url.contains("redirect_uri"));
+        assert!(deserialized.auth_url.contains("scope"));
+    }
+
+    #[test]
+    fn test_drive_status_camel_case_conversion() {
+        let status = DriveStatus {
+            connected: true,
+            email: Some("test@example.com".to_string()),
+        };
+
+        let json = serde_json::to_string(&status).unwrap();
+
+        // Should be camelCase
+        assert!(json.contains("connected"));
+        assert!(json.contains("email"));
+
+        // Should NOT be snake_case (already camelCase field names)
+        assert!(!json.contains("is_connected"));
+    }
 }
