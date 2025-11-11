@@ -19,13 +19,13 @@ function handleRefresh() {
 <template>
   <article class="panel">
     <div class="panel-header">
-      <h2>Active Protocols</h2>
+      <h2>💊 My Peptide Plans</h2>
       <button @click="handleRefresh" :disabled="props.loading">
-        {{ props.loading ? "Refreshing..." : "Refresh" }}
+        {{ props.loading ? "↻ Loading..." : "↻ Refresh" }}
       </button>
     </div>
     <p v-if="!props.protocols.length && !props.loading" class="muted">
-      No protocols yet. Create one to get started.
+      No peptide plans yet. Create your first one below!
     </p>
     <ul v-else class="protocol-list">
       <li v-for="protocol in props.protocols" :key="protocol.id">
@@ -33,8 +33,8 @@ function handleRefresh() {
         <div class="protocol-meta">
           <span>{{ protocol.peptide_name }}</span>
           <span>
-            Updated:
-            {{ new Date(protocol.updated_at).toLocaleString() }}
+            Last updated:
+            {{ new Date(protocol.updated_at).toLocaleDateString() }}
           </span>
         </div>
         <p class="protocol-notes" v-if="protocol.notes">

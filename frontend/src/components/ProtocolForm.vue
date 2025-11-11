@@ -23,40 +23,41 @@ function handleSubmit() {
 <template>
   <article class="panel">
     <div class="panel-header">
-      <h2>New Protocol</h2>
+      <h2>➕ Add New Peptide Plan</h2>
     </div>
     <form class="form-stack" @submit.prevent="handleSubmit">
       <label>
-        Name
-        <input v-model="props.form.name" type="text" placeholder="Protocol name" />
+        Plan Name
+        <input v-model="props.form.name" type="text" placeholder="e.g., Morning Routine, Recovery Plan" />
       </label>
       <label>
-        Peptide
+        Which Peptide?
         <input
           v-model="props.form.peptideName"
           type="text"
-          placeholder="BPC-157, TB-500..."
+          placeholder="e.g., BPC-157, TB-500"
         />
       </label>
       <label>
-        Target concentration (mg/mL)
+        Strength (optional)
         <input
           v-model="props.form.targetConcentration"
           type="number"
           min="0"
           step="0.01"
+          placeholder="mg/mL"
         />
       </label>
       <label>
-        Notes
+        Notes (optional)
         <textarea
           v-model="props.form.notes"
           rows="3"
-          placeholder="Reconstitution details, supplier info..."
+          placeholder="Where you bought it, how to mix it, storage instructions, etc."
         />
       </label>
       <button class="primary" type="submit" :disabled="props.saving">
-        {{ props.saving ? "Saving..." : "Save protocol" }}
+        {{ props.saving ? "Saving..." : "💾 Save Plan" }}
       </button>
     </form>
   </article>

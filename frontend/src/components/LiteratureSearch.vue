@@ -1,35 +1,20 @@
 <template>
   <div class="literature-search">
-    <h2>📚 Literature Search</h2>
+    <h2>📚 Research Papers</h2>
+    <p class="subtitle">Find scientific studies about peptides</p>
 
     <!-- Search Form -->
     <div class="search-box">
       <input
         v-model="searchQuery"
         type="text"
-        placeholder="Search for peptide research (e.g., BPC-157 wound healing)..."
+        placeholder="What do you want to research? (e.g., BPC-157 wound healing)"
         @keyup.enter="handleSearch"
         class="search-input"
       />
       <button @click="handleSearch" :disabled="isSearching || !searchQuery.trim()" class="search-btn">
-        {{ isSearching ? 'Searching...' : 'Search' }}
+        {{ isSearching ? 'Finding Papers...' : 'Find Papers' }}
       </button>
-    </div>
-
-    <div class="search-options">
-      <label>
-        <input type="checkbox" v-model="searchPubMed" /> PubMed
-      </label>
-      <label>
-        <input type="checkbox" v-model="searchOpenAlex" /> OpenAlex
-      </label>
-      <label>
-        <input type="checkbox" v-model="searchCrossref" /> Crossref
-      </label>
-      <label>
-        Max results:
-        <input type="number" v-model.number="maxResults" min="1" max="50" class="max-results-input" />
-      </label>
     </div>
 
     <!-- Error Display -->
@@ -39,9 +24,9 @@
 
     <!-- Search Results -->
     <div v-if="searchResults.length > 0" class="search-results">
-      <h3>Search Results</h3>
+      <h3>Papers We Found</h3>
       <div v-for="sourceResult in searchResults" :key="sourceResult.source" class="source-section">
-        <h4>{{ sourceResult.source }} ({{ sourceResult.results.length }} results)</h4>
+        <h4 class="source-header">From {{ getSourceName(sourceResult.source) }} ({{ sourceResult.results.length }} papers)</h4>
         <div v-for="(result, idx) in sourceResult.results" :key="idx" class="result-card">
           <h5>{{ result.title }}</h5>
           <p v-if="result.authors" class="authors">{{ result.authors }}</p>
@@ -60,35 +45,35 @@
       </div>
     </div>
 
-    <!-- Cached Literature -->
+    <!-- Saved Papers -->
     <div class="cached-section">
       <div class="cached-header">
-        <h3>Cached Literature ({{ cachedLiterature.length }})</h3>
-        <button @click="loadCachedLiterature" class="refresh-btn">Refresh</button>
+        <h3>Your Saved Papers ({{ cachedLiterature.length }})</h3>
+        <button @click="loadCachedLiterature" class="refresh-btn">↻ Refresh</button>
       </div>
 
       <input
         v-model="cacheSearchQuery"
         type="text"
-        placeholder="Filter cached entries..."
+        placeholder="Search your saved papers..."
         @input="handleCacheSearch"
         class="search-input"
       />
 
       <div v-if="filteredCachedLiterature.length === 0" class="no-results">
-        No cached literature yet. Search for papers above to populate the cache.
+        No saved papers yet. Search for papers above and they'll be saved here automatically!
       </div>
 
       <div v-else class="literature-list">
         <div v-for="entry in filteredCachedLiterature" :key="entry.id" class="literature-card">
           <div class="literature-header">
-            <span class="source-badge">{{ entry.source }}</span>
-            <span class="date">{{ formatDate(entry.indexed_at) }}</span>
+            <span class="source-badge">{{ getSourceName(entry.source) }}</span>
+            <span class="date">Saved {{ formatDate(entry.indexed_at) }}</span>
           </div>
           <h4>{{ entry.title }}</h4>
           <p v-if="entry.summary" class="summary">{{ entry.summary }}</p>
           <a v-if="entry.url" :href="entry.url" target="_blank" rel="noopener noreferrer" class="view-link">
-            View Article →
+            📄 Read Paper →
           </a>
         </div>
       </div>
@@ -112,11 +97,8 @@ const isSearching = ref(false);
 const searchResults = ref<LiteratureSearchResult[]>([]);
 const error = ref<string | null>(null);
 
-// Search options
-const searchPubMed = ref(true);
-const searchOpenAlex = ref(true);
-const searchCrossref = ref(false);
-const maxResults = ref(10);
+// Always search all sources with sensible defaults
+const maxResults = 10;
 
 // Cache state
 const cachedLiterature = ref<LiteratureEntry[]>([]);
@@ -132,23 +114,16 @@ async function loadCachedLiterature() {
     cachedLiterature.value = await listLiterature();
     filteredCachedLiterature.value = cachedLiterature.value;
   } catch (e) {
-    console.error('Failed to load cached literature:', e);
-    error.value = 'Failed to load cached literature';
+    console.error('Failed to load saved papers:', e);
+    error.value = 'Could not load your saved papers. Please try again.';
   }
 }
 
 async function handleSearch() {
   if (!searchQuery.value.trim()) return;
 
-  const sources: string[] = [];
-  if (searchPubMed.value) sources.push('pubmed');
-  if (searchOpenAlex.value) sources.push('openalex');
-  if (searchCrossref.value) sources.push('crossref');
-
-  if (sources.length === 0) {
-    error.value = 'Please select at least one source';
-    return;
-  }
+  // Always search all sources - user doesn't need to choose
+  const sources = ['pubmed', 'openalex'];
 
   isSearching.value = true;
   error.value = null;
@@ -157,16 +132,16 @@ async function handleSearch() {
   try {
     const results = await searchLiterature({
       query: searchQuery.value,
-      maxResults: maxResults.value,
+      maxResults: maxResults,
       sources,
     });
     searchResults.value = results;
 
-    // Refresh cache after search
+    // Refresh saved papers after search
     await loadCachedLiterature();
   } catch (e: any) {
     console.error('Search failed:', e);
-    error.value = `Search failed: ${e.message || e}`;
+    error.value = `Couldn't find papers. Please check your internet connection and try again.`;
   } finally {
     isSearching.value = false;
   }
@@ -193,6 +168,15 @@ function formatDate(dateStr: string): string {
     return dateStr;
   }
 }
+
+function getSourceName(source: string): string {
+  const names: Record<string, string> = {
+    'pubmed': 'Medical Database',
+    'openalex': 'Research Library',
+    'crossref': 'Scientific Journal Index',
+  };
+  return names[source.toLowerCase()] || source;
+}
 </script>
 
 <style scoped>
@@ -203,8 +187,15 @@ function formatDate(dateStr: string): string {
 }
 
 h2 {
-  margin-bottom: 20px;
+  margin-bottom: 8px;
   color: #2c3e50;
+}
+
+.subtitle {
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 20px;
+  margin-top: 0;
 }
 
 .search-box {

@@ -4,6 +4,7 @@ import ProtocolList from "./components/ProtocolList.vue";
 import ProtocolForm from "./components/ProtocolForm.vue";
 import AiSummaryPanel from "./components/AiSummaryPanel.vue";
 import LiteratureSearch from "./components/LiteratureSearch.vue";
+import WelcomeScreen from "./components/WelcomeScreen.vue";
 import type {
   PeptideProtocol,
   SummaryFormat,
@@ -110,16 +111,18 @@ onMounted(() => {
 </script>
 
 <template>
+  <WelcomeScreen />
+
   <main class="page">
     <header>
-      <h1>PepTrack</h1>
+      <h1>🧪 PepTrack</h1>
       <p class="subtitle">
-        Privacy-first peptide protocol management with local AI research assistance.
+        Keep track of your peptides and research - all stored privately on your computer.
       </p>
     </header>
 
     <section v-if="errorMessage" class="banner error">
-      {{ errorMessage }}
+      ⚠️ {{ errorMessage }}
     </section>
 
     <section class="grid">
