@@ -41,11 +41,13 @@
 //! # }
 //! ```
 
+pub mod backup_encryption;
 pub mod db;
 pub mod encryption;
 pub mod keychain;
 pub mod models;
 
+pub use backup_encryption::{decrypt_backup, encrypt_backup, is_encrypted_backup};
 pub use db::{StorageConfig, StorageManager};
 pub use encryption::{EnvelopeEncryption, KeyMaterial, KeyProvider, StaticKeyProvider};
 pub use keychain::{migrate_file_key_to_keychain, KeychainKeyProvider};

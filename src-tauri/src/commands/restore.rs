@@ -7,16 +7,19 @@ use tracing::{info, warn};
 use crate::commands::backup::BackupData;
 use crate::state::AppState;
 
-/// Restore data from a backup file
+/// Restore data from a backup file.
+///
+/// If the backup is encrypted, `password` must be provided.
 #[tauri::command]
 pub async fn restore_from_backup(
     state: State<'_, AppState>,
     file_path: String,
+    password: Option<String>,
 ) -> Result<RestoreResult, String> {
     info!("Restoring from backup: {}", file_path);
 
     // Read and parse backup file
-    let backup_data = read_backup_file(&file_path)
+    let backup_data = read_backup_file(&file_path, password.as_deref())
         .map_err(|e| format!("Failed to read backup file: {}", e))?;
 
     // Validate backup
@@ -92,10 +95,13 @@ pub async fn restore_from_backup(
 
 /// Preview backup file contents without restoring
 #[tauri::command]
-pub async fn preview_backup(file_path: String) -> Result<BackupPreview, String> {
+pub async fn preview_backup(
+    file_path: String,
+    password: Option<String>,
+) -> Result<BackupPreview, String> {
     info!("Previewing backup: {}", file_path);
 
-    let backup_data = read_backup_file(&file_path)
+    let backup_data = read_backup_file(&file_path, password.as_deref())
         .map_err(|e| format!("Failed to read backup file: {}", e))?;
 
     Ok(BackupPreview {
@@ -108,7 +114,7 @@ pub async fn preview_backup(file_path: String) -> Result<BackupPreview, String> 
 
 // Helper functions
 
-fn read_backup_file(file_path: &str) -> Result<BackupData> {
+fn read_backup_file(file_path: &str, password: Option<&str>) -> Result<BackupData> {
     let data = std::fs::read(file_path)
         .with_context(|| format!("Failed to read file: {}", file_path))?;
 
@@ -126,7 +132,19 @@ fn read_backup_file(file_path: &str) -> Result<BackupData> {
             .context("Backup file is not valid UTF-8")?
     };
 
-    let backup: BackupData = serde_json::from_str(&json)
+    // Check if encrypted and decrypt if necessary
+    let decrypted_json = if peptrack_core::is_encrypted_backup(&json) {
+        let password = password.ok_or_else(|| {
+            anyhow::anyhow!("Backup is encrypted but no password was provided")
+        })?;
+
+        peptrack_core::decrypt_backup(&json, password)
+            .context("Failed to decrypt backup - check password")?
+    } else {
+        json
+    };
+
+    let backup: BackupData = serde_json::from_str(&decrypted_json)
         .context("Failed to parse backup file as JSON")?;
 
     Ok(backup)

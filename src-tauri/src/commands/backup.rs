@@ -26,10 +26,15 @@ pub struct BackupData {
     pub literature: Vec<serde_json::Value>,
 }
 
-/// Exports all data to a JSON file that the user can save
+/// Exports all data to a JSON file that the user can save.
+///
+/// If `password` is provided, the backup will be encrypted.
 #[tauri::command]
-pub async fn export_backup_data(state: State<'_, AppState>) -> Result<BackupData, String> {
-    info!("Starting backup export");
+pub async fn export_backup_data(
+    state: State<'_, AppState>,
+    password: Option<String>,
+) -> Result<String, String> {
+    info!("Starting backup export (encrypted: {})", password.is_some());
 
     // Load all data from storage
     let protocols = state
@@ -85,12 +90,30 @@ pub async fn export_backup_data(state: State<'_, AppState>) -> Result<BackupData
         .map(|l| serde_json::to_value(l).unwrap_or_default())
         .collect();
 
-    Ok(BackupData {
+    let backup_data = BackupData {
         metadata,
         protocols: protocols_json,
         dose_logs: doses_json,
         literature: literature_json,
-    })
+    };
+
+    // Serialize to JSON
+    let backup_json = serde_json::to_string_pretty(&backup_data)
+        .map_err(|e| format!("Failed to serialize backup: {}", e))?;
+
+    // Optionally encrypt
+    if let Some(password) = password {
+        if password.is_empty() {
+            warn!("Empty password provided for backup encryption - skipping encryption");
+            Ok(backup_json)
+        } else {
+            info!("Encrypting backup with password");
+            peptrack_core::encrypt_backup(&backup_json, &password)
+                .map_err(|e| format!("Failed to encrypt backup: {}", e))
+        }
+    } else {
+        Ok(backup_json)
+    }
 }
 
 /// Gets recommended backup file path
