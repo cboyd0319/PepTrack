@@ -175,11 +175,55 @@ impl<P: KeyProvider + 'static> StorageManager<P> {
         Ok(())
     }
 
+    /// Lists all cached literature entries
+    ///
+    /// Returns entries ordered by indexed date (most recent first).
+    pub fn list_literature(&self) -> Result<Vec<LiteratureEntry>> {
+        let conn = self.open_connection()?;
+        let mut stmt = conn.prepare("SELECT payload FROM literature_cache ORDER BY indexed_at DESC")?;
+        let mut rows = stmt.query([]).context("Unable to run literature list query")?;
+        let mut entries = Vec::new();
+        while let Some(row) = rows.next()? {
+            let blob: Vec<u8> = row.get(0)?;
+            entries.push(self.decode_literature(&blob)?);
+        }
+        Ok(entries)
+    }
+
+    /// Searches cached literature by title or source
+    ///
+    /// This performs a case-insensitive search on decrypted entries.
+    /// For large caches, consider adding FTS (Full Text Search) support.
+    pub fn search_literature(&self, query: &str) -> Result<Vec<LiteratureEntry>> {
+        let all_entries = self.list_literature()?;
+        let query_lower = query.to_lowercase();
+
+        Ok(all_entries
+            .into_iter()
+            .filter(|entry| {
+                entry.title.to_lowercase().contains(&query_lower)
+                    || entry.source.to_lowercase().contains(&query_lower)
+                    || entry
+                        .summary
+                        .as_ref()
+                        .map(|s| s.to_lowercase().contains(&query_lower))
+                        .unwrap_or(false)
+            })
+            .collect())
+    }
+
     fn decode_protocol(&self, blob: &[u8]) -> Result<PeptideProtocol> {
         let decrypted = self.encryption.open(blob)?;
         let protocol: PeptideProtocol =
             serde_json::from_slice(&decrypted).context("Failed to deserialize protocol")?;
         Ok(protocol)
+    }
+
+    fn decode_literature(&self, blob: &[u8]) -> Result<LiteratureEntry> {
+        let decrypted = self.encryption.open(blob)?;
+        let entry: LiteratureEntry =
+            serde_json::from_slice(&decrypted).context("Failed to deserialize literature entry")?;
+        Ok(entry)
     }
 }
 

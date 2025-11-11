@@ -6,6 +6,7 @@ use tracing::info;
 
 use commands::{
     ai::summarize_text,
+    literature::{list_literature, search_cached_literature, search_literature},
     protocols::{list_protocols, save_protocol},
 };
 use state::build_state;
@@ -36,7 +37,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_protocols,
             save_protocol,
-            summarize_text
+            summarize_text,
+            list_literature,
+            search_cached_literature,
+            search_literature
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

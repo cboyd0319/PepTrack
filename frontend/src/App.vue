@@ -3,6 +3,7 @@ import { onMounted, ref } from "vue";
 import ProtocolList from "./components/ProtocolList.vue";
 import ProtocolForm from "./components/ProtocolForm.vue";
 import AiSummaryPanel from "./components/AiSummaryPanel.vue";
+import LiteratureSearch from "./components/LiteratureSearch.vue";
 import type {
   PeptideProtocol,
   SummaryFormat,
@@ -138,5 +139,9 @@ onMounted(() => {
       :summary-provider="summaryProvider"
       @summarize="handleSummarize"
     />
+
+    <section class="literature-section">
+      <LiteratureSearch />
+    </section>
   </main>
 </template>

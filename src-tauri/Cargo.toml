@@ -24,6 +24,7 @@ tauri = { version = "2.9.2", features = ["native-tls"] }
 tauri-plugin-log = "2"
 peptrack-core = { path = "../crates/core" }
 peptrack-local-ai = { path = "../crates/local-ai" }
+peptrack-literature = { path = "../crates/literature" }
 tokio = { version = "1.41.1", features = ["rt-multi-thread", "macros"] }
 anyhow = { workspace = true }
 thiserror = { workspace = true }

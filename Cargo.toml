@@ -3,6 +3,7 @@ members = [
   "src-tauri",
   "crates/core",
   "crates/local-ai",
+  "crates/literature",
 ]
 resolver = "2"
 

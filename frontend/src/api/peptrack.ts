@@ -48,3 +48,51 @@ export async function summarizeContent(params: {
     payload: params,
   });
 }
+
+// Literature types
+
+export interface LiteratureEntry {
+  id: string;
+  source: string;
+  title: string;
+  url?: string | null;
+  summary?: string | null;
+  relevance_score?: number | null;
+  indexed_at: string;
+}
+
+export interface LiteratureResult {
+  source: string;
+  title: string;
+  url?: string | null;
+  doi?: string | null;
+  authors?: string | null;
+  published_date?: string | null;
+  journal?: string | null;
+  abstract_text?: string | null;
+}
+
+export interface LiteratureSearchResult {
+  source: string;
+  results: LiteratureResult[];
+}
+
+export interface SearchLiteraturePayload {
+  query: string;
+  maxResults?: number;
+  sources?: string[];
+}
+
+// Literature API calls
+
+export async function listLiterature() {
+  return invoke<LiteratureEntry[]>("list_literature");
+}
+
+export async function searchCachedLiterature(query: string) {
+  return invoke<LiteratureEntry[]>("search_cached_literature", { query });
+}
+
+export async function searchLiterature(payload: SearchLiteraturePayload) {
+  return invoke<LiteratureSearchResult[]>("search_literature", { payload });
+}
