@@ -25,7 +25,7 @@ pub struct SearchLiteraturePayload {
 
 /// Lists all cached literature entries
 #[tauri::command]
-pub async fn list_literature(state: State<'_, AppState>) -> Result<Vec<LiteratureEntry>, String> {
+pub async fn list_literature(state: State<'_, std::sync::Arc<AppState>>) -> Result<Vec<LiteratureEntry>, String> {
     state
         .storage
         .list_literature()
@@ -35,7 +35,7 @@ pub async fn list_literature(state: State<'_, AppState>) -> Result<Vec<Literatur
 /// Searches cached literature by query
 #[tauri::command]
 pub async fn search_cached_literature(
-    state: State<'_, AppState>,
+    state: State<'_, std::sync::Arc<AppState>>,
     query: String,
 ) -> Result<Vec<LiteratureEntry>, String> {
     state
@@ -47,7 +47,7 @@ pub async fn search_cached_literature(
 /// Searches external APIs for new literature and caches results
 #[tauri::command]
 pub async fn search_literature(
-    state: State<'_, AppState>,
+    state: State<'_, std::sync::Arc<AppState>>,
     payload: SearchLiteraturePayload,
 ) -> Result<Vec<LiteratureSearchResult>, String> {
     let max_results = payload.max_results.unwrap_or(10);

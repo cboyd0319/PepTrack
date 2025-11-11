@@ -99,7 +99,7 @@ pub async fn complete_drive_oauth(
     code: String,
     state_param: String,
     oauth_state: State<'_, OAuthState>,
-    app_state: State<'_, AppState>,
+    app_state: State<'_, std::sync::Arc<AppState>>,
 ) -> Result<DriveStatus, String> {
     info!("Completing Google Drive OAuth flow");
 
@@ -166,7 +166,7 @@ pub async fn complete_drive_oauth(
 
 /// Checks Google Drive connection status
 #[tauri::command]
-pub async fn check_drive_status(state: State<'_, AppState>) -> Result<DriveStatus, String> {
+pub async fn check_drive_status(state: State<'_, std::sync::Arc<AppState>>) -> Result<DriveStatus, String> {
     // Try to load and refresh tokens if needed
     let tokens = load_and_refresh_tokens(&state).await;
 
@@ -186,7 +186,7 @@ pub async fn check_drive_status(state: State<'_, AppState>) -> Result<DriveStatu
 
 /// Disconnects Google Drive by removing stored tokens
 #[tauri::command]
-pub async fn disconnect_drive(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn disconnect_drive(state: State<'_, std::sync::Arc<AppState>>) -> Result<(), String> {
     info!("Disconnecting Google Drive");
 
     delete_drive_tokens(&state)
@@ -202,7 +202,7 @@ pub async fn disconnect_drive(state: State<'_, AppState>) -> Result<(), String> 
 pub async fn upload_to_drive(
     filename: String,
     content: String,
-    state: State<'_, AppState>,
+    state: State<'_, std::sync::Arc<AppState>>,
 ) -> Result<String, String> {
     info!("Uploading backup to Google Drive: {}", filename);
 

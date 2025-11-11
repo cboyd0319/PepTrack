@@ -31,7 +31,7 @@ pub struct BackupData {
 /// If `password` is provided, the backup will be encrypted.
 #[tauri::command]
 pub async fn export_backup_data(
-    state: State<'_, AppState>,
+    state: State<'_, std::sync::Arc<AppState>>,
     password: Option<String>,
 ) -> Result<String, String> {
     info!("Starting backup export (encrypted: {})", password.is_some());

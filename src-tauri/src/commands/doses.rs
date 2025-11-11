@@ -17,7 +17,7 @@ pub struct LogDosePayload {
 /// Logs a new dose
 #[tauri::command]
 pub async fn log_dose(
-    state: State<'_, AppState>,
+    state: State<'_, std::sync::Arc<AppState>>,
     payload: LogDosePayload,
 ) -> Result<DoseLog, String> {
     let mut log = DoseLog::new(payload.protocol_id, payload.site, payload.amount_mg);
@@ -33,14 +33,14 @@ pub async fn log_dose(
 
 /// Lists all dose logs
 #[tauri::command]
-pub async fn list_dose_logs(state: State<'_, AppState>) -> Result<Vec<DoseLog>, String> {
+pub async fn list_dose_logs(state: State<'_, std::sync::Arc<AppState>>) -> Result<Vec<DoseLog>, String> {
     state.storage.list_dose_logs().map_err(|err| err.to_string())
 }
 
 /// Lists dose logs for a specific protocol
 #[tauri::command]
 pub async fn list_dose_logs_for_protocol(
-    state: State<'_, AppState>,
+    state: State<'_, std::sync::Arc<AppState>>,
     protocol_id: String,
 ) -> Result<Vec<DoseLog>, String> {
     state
@@ -52,7 +52,7 @@ pub async fn list_dose_logs_for_protocol(
 /// Deletes a specific dose log
 #[tauri::command]
 pub async fn delete_dose_log(
-    state: State<'_, AppState>,
+    state: State<'_, std::sync::Arc<AppState>>,
     log_id: String,
 ) -> Result<(), String> {
     state

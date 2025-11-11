@@ -10,7 +10,7 @@ use crate::state::AppState;
 
 #[tauri::command]
 pub async fn create_supplier(
-    state: State<'_, AppState>,
+    state: State<'_, std::sync::Arc<AppState>>,
     payload: CreateSupplierPayload,
 ) -> Result<Supplier, String> {
     info!("Creating supplier: {}", payload.name);
@@ -33,7 +33,7 @@ pub async fn create_supplier(
 }
 
 #[tauri::command]
-pub async fn list_suppliers(state: State<'_, AppState>) -> Result<Vec<Supplier>, String> {
+pub async fn list_suppliers(state: State<'_, std::sync::Arc<AppState>>) -> Result<Vec<Supplier>, String> {
     state.storage.list_suppliers().map_err(|e| {
         error!("Failed to list suppliers: {:#}", e);
         format!("Failed to list suppliers: {}", e)
@@ -42,7 +42,7 @@ pub async fn list_suppliers(state: State<'_, AppState>) -> Result<Vec<Supplier>,
 
 #[tauri::command]
 pub async fn get_supplier(
-    state: State<'_, AppState>,
+    state: State<'_, std::sync::Arc<AppState>>,
     supplier_id: String,
 ) -> Result<Option<Supplier>, String> {
     state
@@ -56,7 +56,7 @@ pub async fn get_supplier(
 
 #[tauri::command]
 pub async fn update_supplier(
-    state: State<'_, AppState>,
+    state: State<'_, std::sync::Arc<AppState>>,
     supplier_id: String,
     payload: UpdateSupplierPayload,
 ) -> Result<Supplier, String> {
@@ -90,7 +90,7 @@ pub async fn update_supplier(
 
 #[tauri::command]
 pub async fn delete_supplier(
-    state: State<'_, AppState>,
+    state: State<'_, std::sync::Arc<AppState>>,
     supplier_id: String,
 ) -> Result<(), String> {
     info!("Deleting supplier: {}", supplier_id);
@@ -108,7 +108,7 @@ pub async fn delete_supplier(
 
 #[tauri::command]
 pub async fn create_inventory_item(
-    state: State<'_, AppState>,
+    state: State<'_, std::sync::Arc<AppState>>,
     payload: CreateInventoryPayload,
 ) -> Result<InventoryItem, String> {
     info!("Creating inventory item for protocol: {}", payload.protocol_id);
@@ -138,7 +138,7 @@ pub async fn create_inventory_item(
 }
 
 #[tauri::command]
-pub async fn list_inventory(state: State<'_, AppState>) -> Result<Vec<InventoryItem>, String> {
+pub async fn list_inventory(state: State<'_, std::sync::Arc<AppState>>) -> Result<Vec<InventoryItem>, String> {
     state.storage.list_inventory().map_err(|e| {
         error!("Failed to list inventory: {:#}", e);
         format!("Failed to list inventory: {}", e)
@@ -147,7 +147,7 @@ pub async fn list_inventory(state: State<'_, AppState>) -> Result<Vec<InventoryI
 
 #[tauri::command]
 pub async fn list_inventory_by_protocol(
-    state: State<'_, AppState>,
+    state: State<'_, std::sync::Arc<AppState>>,
     protocol_id: String,
 ) -> Result<Vec<InventoryItem>, String> {
     state
@@ -161,7 +161,7 @@ pub async fn list_inventory_by_protocol(
 
 #[tauri::command]
 pub async fn get_inventory_item(
-    state: State<'_, AppState>,
+    state: State<'_, std::sync::Arc<AppState>>,
     item_id: String,
 ) -> Result<Option<InventoryItem>, String> {
     state
@@ -175,7 +175,7 @@ pub async fn get_inventory_item(
 
 #[tauri::command]
 pub async fn update_inventory_item(
-    state: State<'_, AppState>,
+    state: State<'_, std::sync::Arc<AppState>>,
     item_id: String,
     payload: UpdateInventoryPayload,
 ) -> Result<InventoryItem, String> {
@@ -215,7 +215,7 @@ pub async fn update_inventory_item(
 
 #[tauri::command]
 pub async fn delete_inventory_item(
-    state: State<'_, AppState>,
+    state: State<'_, std::sync::Arc<AppState>>,
     item_id: String,
 ) -> Result<(), String> {
     info!("Deleting inventory item: {}", item_id);

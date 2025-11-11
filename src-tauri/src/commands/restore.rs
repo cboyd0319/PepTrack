@@ -12,7 +12,7 @@ use crate::state::AppState;
 /// If the backup is encrypted, `password` must be provided.
 #[tauri::command]
 pub async fn restore_from_backup(
-    state: State<'_, AppState>,
+    state: State<'_, std::sync::Arc<AppState>>,
     file_path: String,
     password: Option<String>,
 ) -> Result<RestoreResult, String> {

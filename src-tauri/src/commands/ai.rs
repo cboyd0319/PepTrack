@@ -30,7 +30,7 @@ pub struct AiAvailabilityStatus {
 }
 
 #[tauri::command]
-pub async fn check_ai_availability(state: State<'_, AppState>) -> Result<AiAvailabilityStatus, String> {
+pub async fn check_ai_availability(state: State<'_, std::sync::Arc<AppState>>) -> Result<AiAvailabilityStatus, String> {
     let providers = state.ai_client.provider_chain();
 
     let codex_available = providers.iter().any(|p| matches!(p, AiProvider::Codex));
@@ -61,7 +61,7 @@ pub async fn check_ai_availability(state: State<'_, AppState>) -> Result<AiAvail
 
 #[tauri::command]
 pub async fn summarize_text(
-    state: State<'_, AppState>,
+    state: State<'_, std::sync::Arc<AppState>>,
     payload: SummarizePayload,
 ) -> Result<SummarizeResult, String> {
     info!("Summarizing text: title='{}'", payload.title);

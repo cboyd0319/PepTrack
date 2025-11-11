@@ -186,10 +186,13 @@ function handleTestNotification() {
 
 <style scoped>
 .settings-page {
-  max-width: 1400px;
+  max-width: 100vw;
+  width: 100%;
   margin: 0 auto;
   padding: 20px;
   min-height: 100vh;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .settings-header {
@@ -211,9 +214,11 @@ function handleTestNotification() {
 /* Sidebar Layout */
 .settings-layout {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 280px minmax(0, 1fr);
   gap: 24px;
   align-items: start;
+  width: 100%;
+  overflow: hidden;
 }
 
 /* Sidebar */
@@ -304,15 +309,36 @@ function handleTestNotification() {
 
 /* Content Area */
 .content-area {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  padding: 32px;
   min-height: 600px;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .content-panel {
   animation: fadeIn 0.3s ease;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Force all child sections to respect the container */
+.content-panel > * {
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0 !important;
+}
+
+/* Force tables to respect container width */
+.content-panel table {
+  table-layout: fixed;
+  width: 100%;
+  word-wrap: break-word;
+}
+
+.content-panel table td,
+.content-panel table th {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  hyphens: auto;
 }
 
 @keyframes fadeIn {

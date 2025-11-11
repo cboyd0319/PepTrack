@@ -340,7 +340,7 @@ pub async fn update_backup_schedule(
 #[tauri::command]
 pub async fn trigger_manual_backup(
     scheduler_state: State<'_, SchedulerState>,
-    app_state: State<'_, AppState>,
+    app_state: State<'_, std::sync::Arc<AppState>>,
 ) -> Result<String, String> {
     info!("Manual backup triggered");
 
