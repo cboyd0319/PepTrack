@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
+import ProtocolList from "./components/ProtocolList.vue";
+import ProtocolForm from "./components/ProtocolForm.vue";
+import AiSummaryPanel from "./components/AiSummaryPanel.vue";
 import type {
   PeptideProtocol,
   SummaryFormat,
+  CreateProtocolPayload,
 } from "./api/peptrack";
 import {
   listProtocols,
@@ -51,15 +55,16 @@ async function handleCreateProtocol() {
 
   savingProtocol.value = true;
   errorMessage.value = null;
+  const payload: CreateProtocolPayload = {
+    name: form.value.name,
+    peptideName: form.value.peptideName,
+    notes: form.value.notes || undefined,
+    targetConcentrationMgMl: form.value.targetConcentration
+      ? Number(form.value.targetConcentration)
+      : undefined,
+  };
   try {
-    await saveProtocol({
-      name: form.value.name,
-      peptideName: form.value.peptideName,
-      notes: form.value.notes || undefined,
-      targetConcentrationMgMl: form.value.targetConcentration
-        ? Number(form.value.targetConcentration)
-        : undefined,
-    });
+    await saveProtocol(payload);
     await refreshProtocols();
     form.value = {
       name: "",
@@ -117,114 +122,21 @@ onMounted(() => {
     </section>
 
     <section class="grid">
-      <article class="panel">
-        <div class="panel-header">
-          <h2>Active Protocols</h2>
-          <button @click="refreshProtocols" :disabled="loadingProtocols">
-            {{ loadingProtocols ? "Refreshing..." : "Refresh" }}
-          </button>
-        </div>
-        <p v-if="!protocols.length && !loadingProtocols" class="muted">
-          No protocols yet. Create one to get started.
-        </p>
-        <ul v-else class="protocol-list">
-          <li v-for="protocol in protocols" :key="protocol.id">
-            <div class="protocol-title">{{ protocol.name }}</div>
-            <div class="protocol-meta">
-              <span>{{ protocol.peptide_name }}</span>
-              <span>
-                Updated:
-                {{ new Date(protocol.updated_at).toLocaleString() }}
-              </span>
-            </div>
-            <p class="protocol-notes" v-if="protocol.notes">
-              {{ protocol.notes }}
-            </p>
-          </li>
-        </ul>
-      </article>
+      <ProtocolList
+        :protocols="protocols"
+        :loading="loadingProtocols"
+        @refresh="refreshProtocols"
+      />
 
-      <article class="panel">
-        <div class="panel-header">
-          <h2>New Protocol</h2>
-        </div>
-        <form class="form-stack" @submit.prevent="handleCreateProtocol">
-          <label>
-            Name
-            <input v-model="form.name" type="text" placeholder="Protocol name" />
-          </label>
-          <label>
-            Peptide
-            <input
-              v-model="form.peptideName"
-              type="text"
-              placeholder="BPC-157, TB-500..."
-            />
-          </label>
-          <label>
-            Target concentration (mg/mL)
-            <input
-              v-model="form.targetConcentration"
-              type="number"
-              min="0"
-              step="0.01"
-            />
-          </label>
-          <label>
-            Notes
-            <textarea
-              v-model="form.notes"
-              rows="3"
-              placeholder="Reconstitution details, supplier info..."
-            />
-          </label>
-          <button class="primary" type="submit" :disabled="savingProtocol">
-            {{ savingProtocol ? "Saving..." : "Save protocol" }}
-          </button>
-        </form>
-      </article>
+      <ProtocolForm :form="form" :saving="savingProtocol" @submit="handleCreateProtocol" />
     </section>
 
-    <section class="panel">
-      <div class="panel-header">
-        <div>
-          <h2>AI Literature Summary</h2>
-          <p class="muted">
-            Uses local Codex CLI by default; falls back to Claude CLI (claude-haiku-4-5).
-          </p>
-        </div>
-      </div>
-      <form class="form-stack" @submit.prevent="handleSummarize">
-        <label>
-          Title
-          <input v-model="summaryForm.title" type="text" placeholder="Paper title" />
-        </label>
-        <label>
-          Format
-          <select v-model="summaryForm.format">
-            <option value="Markdown">Markdown</option>
-            <option value="Json">JSON</option>
-          </select>
-        </label>
-        <label>
-          Content
-          <textarea
-            v-model="summaryForm.content"
-            rows="6"
-            placeholder="Paste abstract, key findings, or raw notes"
-          />
-        </label>
-        <button class="primary" type="submit" :disabled="summarizing">
-          {{ summarizing ? "Summarizing..." : "Summarize" }}
-        </button>
-      </form>
-
-      <div v-if="summaryOutput" class="summary-output">
-        <div class="summary-meta">
-          Generated by: {{ summaryProvider }}
-        </div>
-        <pre>{{ summaryOutput }}</pre>
-      </div>
-    </section>
+    <AiSummaryPanel
+      :form="summaryForm"
+      :summarizing="summarizing"
+      :summary-output="summaryOutput"
+      :summary-provider="summaryProvider"
+      @summarize="handleSummarize"
+    />
   </main>
 </template>

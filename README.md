@@ -38,14 +38,18 @@ PepTrack is a macOS-first desktop application built with Rust, Tauri, and Vue fo
 ## Repository Layout
 ```
 .
-├── frontend/              # Vue UI + Vite config
-│   ├── src/App.vue        # Current screens (protocol list, creator, AI summary)
-│   └── src/api/           # Tauri invoke helpers
-├── src-tauri/             # Tauri shell & commands
-│   └── src/lib.rs         # State setup, encryption key bootstrap, IPC handlers
+├── frontend/                # Vue UI + Vite config
+│   ├── src/App.vue          # Entry screen wiring feature panels together
+│   ├── src/components/      # ProtocolList, ProtocolForm, AiSummaryPanel
+│   ├── src/api/             # Tauri invoke helpers
+│   └── vitest.config.ts     # Component/unit test config
+├── src-tauri/               # Tauri shell & commands
+│   ├── src/lib.rs           # Builder + plugin wiring
+│   ├── src/state.rs         # AppState bootstrap + key mgmt
+│   └── src/commands/        # IPC handlers (protocols.rs, ai.rs)
 ├── crates/
-│   ├── core/              # Storage manager, models, ChaCha20-Poly1305 envelope encryption
-│   └── local-ai/          # Codex/Claude CLI orchestrator
+│   ├── core/                # Storage manager, models, ChaCha20-Poly1305 encryption
+│   └── local-ai/            # Codex/Claude CLI orchestrator + CLI parsing
 ├── docs/                  # Contributor notes (future-self guide, agent handbook)
 └── AGENTS.md              # Quick contributor checklist
 ```
@@ -69,8 +73,9 @@ PepTrack is a macOS-first desktop application built with Rust, Tauri, and Vue fo
 4. **Test & lint**
    ```bash
    cargo fmt && cargo clippy --workspace
-   cargo test -p peptrack-core
+   cargo test --workspace
    (cd frontend && npm run build)
+   (cd frontend && npm run test -- --run)
    ```
 
 ---

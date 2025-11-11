@@ -9,10 +9,10 @@
 - Crypto: `chacha20poly1305 0.11.0-rc.2` (warnings resolved); ensure `cargo update` doesn’t downgrade.
 
 ## Project Snapshot
-- `crates/core`: `StorageManager` encrypts JSON blobs with ChaCha20-Poly1305 and persists them in `~/Library/Application Support/PepTrack/peptrack.sqlite`. Tables exist for protocols, dose logs, and literature cache—even though only protocols are exposed in the UI.
-- `crates/local-ai`: Detects Codex CLI (`gpt-5`) and Claude CLI (`claude-haiku-4-5`). `LocalAiOrchestrator` walks a preferred chain and parses JSON responses.
-- `src-tauri`: Boots the data dir, creates/loads `peptrack.key`, registers Tauri commands (`list_protocols`, `save_protocol`, `summarize_text`), and exposes state to the frontend.
-- `frontend`: Single-page Vue app with protocol list/form and an AI summary panel that surfaces orchestrator output.
+- `crates/core`: `StorageManager` encrypts JSON blobs with ChaCha20-Poly1305 and persists them in `~/Library/Application Support/PepTrack/peptrack.sqlite`. Tables exist for protocols, dose logs, and literature cache—even though only protocols are exposed in the UI. Includes a SQLite round-trip unit test using `tempfile`.
+- `crates/local-ai`: Detects Codex CLI (`gpt-5`) and Claude CLI (`claude-haiku-4-5`). `LocalAiOrchestrator` walks a preferred chain and exposes `provider_chain()`; tests assert fallback order.
+- `src-tauri`: Modular layout (`state.rs`, `commands/`) for AppState bootstrapping and IPC handlers (`list_protocols`, `save_protocol`, `summarize_text`).
+- `frontend`: Vue app split into `ProtocolList`, `ProtocolForm`, and `AiSummaryPanel` components with Vitest scaffold + sample test.
 
 ## Active Priorities
 1. **Supplier & Inventory tracking:** extend schema + models, add CRUD commands, and build Vue UI (cost per mg, vial state, supplier metadata).
@@ -26,9 +26,9 @@
 1. `cd /Users/chad/Documents/GitHub/PepTrack && git pull --rebase` (keep local branches up to date).
 2. Verify tool versions: `rustup show active-toolchain`, `node -v`.
 3. Install deps if needed: `cd frontend && npm install`.
-4. During dev use `cargo tauri dev`; for API/backend-only work run `cargo fmt && cargo clippy --workspace && cargo test -p peptrack-core`.
-5. When touching the frontend, run `(cd frontend && npm run build)` before opening a PR.
-6. Document non-obvious workarounds in `docs/` and keep `AGENTS.md` aligned.
+4. During dev use `cargo tauri dev`; for backend-only work run `cargo fmt && cargo clippy --workspace --all-targets && cargo test --workspace`.
+5. When touching the frontend, run `(cd frontend && npm run build)` and `(cd frontend && npm run test -- --run)` before opening a PR.
+6. Document non-obvious workarounds in `docs/` and keep `AGENTS.md` + the persona brief aligned.
 
 ## Useful Commands
 ```bash

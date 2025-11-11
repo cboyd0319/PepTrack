@@ -186,3 +186,34 @@ impl<P: KeyProvider + 'static> StorageManager<P> {
 pub fn now_timestamp() -> OffsetDateTime {
     OffsetDateTime::now_utc()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{models::PeptideProtocol, StaticKeyProvider};
+    use tempfile::tempdir;
+
+    #[test]
+    fn upsert_and_list_protocols_roundtrips() {
+        let tmp = tempdir().expect("tempdir");
+        let key_provider =
+            Arc::new(StaticKeyProvider::new(vec![7u8; 32]).expect("static key provider"));
+        let storage = StorageManager::new(StorageConfig {
+            data_dir: Some(tmp.path().to_path_buf()),
+            db_file_name: Some("test.sqlite".into()),
+            key_provider,
+        })
+        .expect("storage manager");
+        storage.initialize().expect("init db");
+
+        let mut protocol = PeptideProtocol::new("Protocol A", "BPC-157");
+        protocol.notes = Some("store at 4C".into());
+
+        storage.upsert_protocol(&protocol).expect("upsert protocol");
+
+        let fetched = storage.list_protocols().expect("list");
+        assert_eq!(fetched.len(), 1);
+        assert_eq!(fetched[0].name, "Protocol A");
+        assert_eq!(fetched[0].notes.as_deref(), Some("store at 4C"));
+    }
+}

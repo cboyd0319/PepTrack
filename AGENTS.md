@@ -1,13 +1,19 @@
 # Repository Guidelines
 
 ## Quick Orientation
-PepTrack lives entirely under `/Users/chad/Documents/GitHub/PepTrack`. The workspace contains three crates (`src-tauri`, `crates/core`, `crates/local-ai`) plus the Vue frontend in `frontend/`. Core responsibilities: `peptrack-core` handles encrypted SQLite storage, `peptrack-local-ai` shells out to Codex or Claude CLIs, and `src-tauri` wires everything into the desktop app. Docs live in `docs/`, including the future-self handoff.
+PepTrack lives entirely under `/Users/chad/Documents/GitHub/PepTrack`. Workspace structure:
+- `src-tauri/`: `lib.rs` sets up plugins, `state.rs` boots AppState/keys, `commands/` hosts IPC handlers (`protocols.rs`, `ai.rs`).
+- `crates/core`: SQLite storage, envelope encryption, and unit tests for protocol round-trips.
+- `crates/local-ai`: CLI orchestrator with provider-chain tests.
+- `frontend/`: Vue app composed of `App.vue` + `components/` (ProtocolList, ProtocolForm, AiSummaryPanel) plus Vitest config/tests.
+Docs live in `docs/`, with persona/future-self briefs; keep them updated whenever behavior changes.
 
 ## Build & Dev Commands
-- `cargo fmt && cargo clippy --workspace` — formatting + lint pass (Rust 1.91.1).
-- `cargo test -p peptrack-core` — exercises storage + encryption logic.
+- `cargo fmt && cargo clippy --workspace --all-targets` — formatting + lint pass (Rust 1.91.1).
+- `cargo test --workspace` — exercises storage + encryption + orchestrator tests.
 - `cargo tauri dev` — runs the desktop shell; automatically launches the Vite dev server from `frontend/`.
 - `(cd frontend && npm install && npm run build)` — install Node 22+ deps and produce the production bundle.
+- `(cd frontend && npm run test -- --run)` — run Vitest component/unit tests.
 - Optional: install Codex CLI (`gpt-5`) and Claude Code CLI (`claude-haiku-4-5`) so the AI summarizer panel works.
 
 ## Coding Style & Conventions

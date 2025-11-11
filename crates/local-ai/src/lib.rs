@@ -107,6 +107,42 @@ impl LocalAiOrchestrator {
         }
         chain
     }
+
+    pub fn provider_chain(&self) -> Vec<AiProvider> {
+        self.resolve_chain()
+            .into_iter()
+            .filter_map(|(provider, handle)| handle.map(|_| provider))
+            .collect()
+    }
+}
+
+#[cfg(test)]
+impl LocalAiOrchestrator {
+    pub(crate) fn with_providers(config: AiClientConfig, codex: bool, claude: bool) -> Self {
+        let codex_handle = if codex {
+            Some(CodexCli {
+                binary: PathBuf::from("codex"),
+                model: config.codex_model.clone(),
+            })
+        } else {
+            None
+        };
+
+        let claude_handle = if claude {
+            Some(ClaudeCli {
+                binary: PathBuf::from("claude"),
+                model: config.claude_model.clone(),
+            })
+        } else {
+            None
+        };
+
+        Self {
+            codex: codex_handle,
+            claude: claude_handle,
+            config,
+        }
+    }
 }
 
 #[async_trait]
@@ -321,4 +357,29 @@ fn parse_codex_json(buffer: &[u8]) -> Option<String> {
     }
 
     last_message
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn provider_chain_prefers_codex_by_default() {
+        let orchestrator =
+            LocalAiOrchestrator::with_providers(AiClientConfig::default(), true, true);
+        assert_eq!(
+            orchestrator.provider_chain(),
+            vec![AiProvider::Codex, AiProvider::Claude]
+        );
+    }
+
+    #[test]
+    fn provider_chain_skips_missing_providers() {
+        let config = AiClientConfig {
+            preferred: AiProvider::Claude,
+            ..AiClientConfig::default()
+        };
+        let orchestrator = LocalAiOrchestrator::with_providers(config, false, true);
+        assert_eq!(orchestrator.provider_chain(), vec![AiProvider::Claude]);
+    }
 }
