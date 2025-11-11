@@ -8,7 +8,10 @@ Welcome to PepTrack! This guide will help you set up all the optional features t
 2. [AI Summary Helper Setup (Optional)](#ai-summary-helper-setup-optional)
 3. [Google Drive Backup Setup (Optional)](#google-drive-backup-setup-optional)
 4. [Backup Options](#backup-options)
-5. [Troubleshooting](#troubleshooting)
+5. [Scheduled Backups](#scheduled-backups)
+6. [Restore from Backup](#restore-from-backup)
+7. [Notification Preferences](#notification-preferences)
+8. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -209,6 +212,133 @@ PepTrack offers two backup methods:
 - Protection against computer loss/damage
 
 **Pro tip:** Use both! Local backups are instant, Drive backups are safe off-site.
+
+---
+
+## Scheduled Backups
+
+Automate your backups to run on a schedule. Perfect for peace of mind!
+
+### How to Set Up
+
+1. Open PepTrack
+2. Go to **Settings & Backups** section
+3. Click the **⏰ Scheduled Backups** tab
+4. Choose your backup frequency:
+   - **Hourly:** Backs up every hour while the app is running
+   - **Daily:** Once per day at your chosen hour
+   - **Weekly:** Once per week on your chosen day
+5. Configure backup options:
+   - **Compression:** Enable to save disk space (.gz files)
+   - **Upload to Drive:** Automatically upload to Google Drive (requires connection)
+   - **Local backup directory:** Where to save backups on your computer
+6. Click **💾 Save Settings**
+7. Click **▶️ Start Scheduler** to begin automatic backups
+
+### Backup Cleanup
+
+Keep your backup folder tidy with automatic cleanup:
+
+**Options:**
+- **Keep Last N Backups:** Only keep the most recent backups (e.g., last 10)
+- **Delete Older Than:** Remove backups older than X days (e.g., 30 days)
+- **Both:** Apply both rules for maximum control
+
+**Example:**
+```
+Keep last 10 backups + Delete older than 30 days
+→ Keeps up to 10 backups, all less than 30 days old
+```
+
+### Important Notes
+
+- Scheduled backups only run while PepTrack is open
+- The scheduler respects your computer's sleep/wake cycles
+- Manual backups don't count toward cleanup limits
+- Cleanup happens after each scheduled backup
+
+---
+
+## Restore from Backup
+
+Lost your data? Switching devices? Restore from any backup file.
+
+### How to Restore
+
+1. Go to **Settings & Backups** section
+2. Click the **📥 Restore** tab
+3. Click **📂 Select Backup File**
+4. Choose your backup file (.json or .gz)
+5. **Preview** shows what will be restored:
+   - Number of protocols
+   - Number of dose logs
+   - Number of literature entries
+   - Backup date and version
+6. Review the preview and click **✅ Restore Backup**
+7. Wait for the restoration to complete
+8. Results show how many items were restored
+
+### Restore Behavior
+
+**Merging, not replacing:**
+- Existing data is **not deleted**
+- New items from backup are added
+- Duplicate items are updated (matched by ID)
+- No data loss from current state
+
+**What's Restored:**
+- All peptide protocols
+- All dose logs with dates and notes
+- All cached literature entries
+- Metadata is preserved
+
+**Supported Formats:**
+- Uncompressed JSON (.json)
+- Compressed backups (.gz)
+- Auto-detection of compression
+
+### When to Restore
+
+- Setting up PepTrack on a new computer
+- Recovering from accidental data loss
+- Merging data from another device
+- Rolling back to a previous state
+
+---
+
+## Notification Preferences
+
+Control when and how PepTrack notifies you about backup events.
+
+### Notification Settings
+
+1. Go to **Settings & Backups** section
+2. Click the **🔔 Notifications** tab
+3. Configure your preferences:
+   - **Enable Notifications:** Master toggle for all notifications
+   - **On Success:** Get notified when backups complete successfully
+   - **On Failure:** Get alerted when backups fail (recommended!)
+   - **Scheduled Backups:** Notify for automatic scheduled backups
+   - **Manual Backups:** Notify for manual backup operations
+
+### Test Your Setup
+
+Click **🔔 Test Notification** to verify:
+- Browser notification permissions are granted
+- Notifications appear correctly
+- Sound and visual style are acceptable
+
+### Notification Permissions
+
+**macOS:**
+- First test will request notification permission
+- Grant permission for PepTrack in System Preferences
+- Notifications work even when app is in background
+
+**Troubleshooting:**
+- If notifications don't appear, check System Preferences > Notifications
+- Ensure "Do Not Disturb" mode isn't blocking notifications
+- Try the test notification button to diagnose issues
 
 ---
 

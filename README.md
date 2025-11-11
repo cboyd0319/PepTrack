@@ -6,9 +6,18 @@ PepTrack is a macOS-first desktop application built with Rust, Tauri, and Vue fo
 
 ## Current Capabilities (Nov 2025)
 - **Protocol storage:** create/list peptide protocols with notes, vial status, and target concentrations. Records are stored in SQLite (`peptrack.sqlite`) under the user’s Application Support directory and encrypted with ChaCha20-Poly1305 envelope encryption.
-- **Dose & literature schemas:** backend structs and tables exist for dose logs and literature cache, ready for future UI wiring.
+- **Dose logging:** full UI for tracking doses with dates, amounts, and notes. Calendar views and history tracking included.
+- **Backup system:** comprehensive backup and restore functionality with:
+  - Manual backups (compressed or uncompressed JSON)
+  - Scheduled automatic backups (hourly, daily, weekly)
+  - Google Drive OAuth integration for cloud backups
+  - Backup preview and restore with detailed results
+  - Automatic backup cleanup with configurable retention policies
+- **Literature search:** integrated search across PubMed, OpenAlex, and Crossref APIs with result caching.
 - **Local AI summarizer:** the Vue panel calls the Tauri command `summarize_text`, which invokes `peptrack-local-ai`. The orchestrator prefers Codex CLI (`gpt-5`), falling back to Claude CLI (`claude-haiku-4-5`), and returns Markdown or JSON summaries.
-- **Zero telemetry:** no outbound requests are made unless the user’s CLI tools do so.
+- **Notifications:** desktop notifications for backup success/failure with user-configurable preferences and granular controls.
+- **Error handling:** intelligent error detection with user-friendly toast notifications and contextual suggestions for resolution.
+- **Zero telemetry:** no outbound requests are made unless the user's CLI tools do so.
 
 ---
 
@@ -99,9 +108,10 @@ PepTrack is a macOS-first desktop application built with Rust, Tauri, and Vue fo
 
 ## Roadmap & Next Steps
 1. **Supplier tracking + inventory:** extend the schema (protocol metadata + new tables) and build Vue UI for suppliers, cost-per-mg, and stock alerts.
-2. **Dose logging UX:** connect the existing `DoseLog` model to UI forms, add calendar/timeline views, and expose Tauri commands for CRUD operations.
-3. **Literature ingestion pipeline:** implement real fetchers (PubMed/OpenAlex/Crossref) with caching in `literature_cache` and expose results in the frontend.
-4. **macOS Keychain integration:** replace file-based key storage with Keychain-backed secrets and provide migration tooling.
-5. **Background reminders:** create a LaunchAgent or Tauri sidecar to surface dose reminders and vial-expiry notifications even when the UI is closed.
+2. **macOS Keychain integration:** replace file-based key storage with Keychain-backed secrets and provide migration tooling (see `docs/keychain_migration_plan.md`).
+3. **Background reminders:** create a LaunchAgent or Tauri sidecar to surface dose reminders and vial-expiry notifications even when the UI is closed.
+4. **Cloud restore:** add ability to restore backups directly from Google Drive without downloading first.
+5. **Multi-cloud support:** extend backup system to support Dropbox, OneDrive, and other cloud providers.
+6. **Backup encryption:** add optional encryption for backup files at rest with user-managed passwords.
 
 For contributor workflows and day-to-day commands, see `AGENTS.md` and `docs/peptrack_future_self.md`.

@@ -9,18 +9,43 @@
 - Crypto: `chacha20poly1305 0.11.0-rc.2` (warnings resolved); ensure `cargo update` doesn’t downgrade.
 
 ## Project Snapshot
-- `crates/core`: `StorageManager` encrypts JSON blobs with ChaCha20-Poly1305 and persists them in `~/Library/Application Support/PepTrack/peptrack.sqlite`. Tables exist for protocols, dose logs, and literature cache—even though only protocols are exposed in the UI. Includes a SQLite round-trip unit test using `tempfile`.
+- `crates/core`: `StorageManager` encrypts JSON blobs with ChaCha20-Poly1305 and persists them in `~/Library/Application Support/PepTrack/peptrack.sqlite`. Full schema with protocols, dose logs, and literature cache—all exposed in the UI. Includes comprehensive unit tests with `tempfile`.
 - `crates/local-ai`: Detects Codex CLI (`gpt-5`) and Claude CLI (`claude-haiku-4-5`). `LocalAiOrchestrator` walks a preferred chain and exposes `provider_chain()`; tests assert fallback order.
-- `src-tauri`: Modular layout (`state.rs`, `commands/`) for AppState bootstrapping and IPC handlers (`list_protocols`, `save_protocol`, `summarize_text`).
-- `frontend`: Vue app split into `ProtocolList`, `ProtocolForm`, and `AiSummaryPanel` components with Vitest scaffold + sample test.
+- `src-tauri/src/commands/`: Complete command suite including:
+  - `protocols.rs` - Protocol CRUD operations
+  - `ai.rs` - AI summarization via local CLIs
+  - `backup.rs` - Manual backup creation
+  - `scheduler_v2.rs` - Scheduled automatic backups with tokio runtime
+  - `drive.rs` - Google Drive OAuth and cloud backup uploads
+  - `restore.rs` - Backup restoration with preview
+- `frontend`: Vue 3 app with comprehensive UI:
+  - Protocol management (`ProtocolList`, `ProtocolForm`)
+  - Dose tracking with calendar views (`DoseTracker`)
+  - Literature search across PubMed/OpenAlex/Crossref (`LiteratureSearch`)
+  - AI summarization panel (`AiSummaryPanel`)
+  - Unified Settings with tabs (`Settings`, `ScheduledBackup`, `GoogleDriveBackup`, `BackupExport`, `RestoreBackup`, `NotificationPreferences`)
+  - Global toast notification system (`Toast`, `errorHandling.ts`)
+  - Vitest test suite
+
+## Completed Features
+- ✅ **Dose logging UX:** Full UI with calendar views, history tracking, and date/amount/notes logging
+- ✅ **Literature ingestion:** PubMed/OpenAlex/Crossref search with result caching in `literature_cache`
+- ✅ **Backup & Restore System:**
+  - Manual and scheduled backups (hourly/daily/weekly)
+  - Google Drive OAuth integration with cloud uploads
+  - Backup compression (gzip), cleanup policies (keep last N / delete older than)
+  - Restore functionality with preview before restore
+  - Desktop notifications for backup events (success/failure)
+- ✅ **Error Handling:** Intelligent error detection with user-friendly toast notifications and contextual suggestions
+- ✅ **Testing Documentation:** Comprehensive edge case documentation in `TESTING.md` with 80+ scenarios
 
 ## Active Priorities
 1. **Supplier & Inventory tracking:** extend schema + models, add CRUD commands, and build Vue UI (cost per mg, vial state, supplier metadata).
-2. **Dose logging UX:** wire `DoseLog` into Tauri commands, design timeline/history components, and display aggregated dosage metrics.
-3. **Literature ingestion:** implement real fetchers (PubMed/OpenAlex/Crossref). Cache normalized results in `literature_cache` and surface them in the UI before invoking AI summarization.
-4. **Keychain-backed secrets:** replace `peptrack.key` on disk with macOS Keychain storage; provide migration utility.
-5. **Notifications/background tasks:** design LaunchAgent or native Tauri sidecar for reminders (dose schedules, vial expiry, supplier restock).
-6. **Testing & telemetry hardening:** add unit/integration tests around storage + orchestrator, and document how to inspect CLI stderr when summaries fail.
+2. **Keychain-backed secrets:** replace `peptrack.key` on disk with macOS Keychain storage; provide migration utility (see `docs/keychain_migration_plan.md`).
+3. **Background reminders:** design LaunchAgent or native Tauri sidecar for dose reminders and vial-expiry notifications when app is closed.
+4. **Cloud restore:** add ability to restore backups directly from Google Drive without manual download.
+5. **Multi-cloud support:** extend backup system to Dropbox, OneDrive, and other providers.
+6. **Backup encryption:** add optional password-based encryption for backup files at rest.
 
 ## Daily Workflow
 1. `cd /Users/chad/Documents/GitHub/PepTrack && git pull --rebase` (keep local branches up to date).

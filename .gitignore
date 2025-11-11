@@ -1,0 +1,64 @@
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+*.sublime-workspace
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+dist-ssr/
+target/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+*.local
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Application data (sensitive)
+oauth_config.json
+oauth_tokens.json
+
+# Backups (local backup files, not version controlled)
+*.backup
+backups/*.json
+backups/*.gz
+
+# macOS Keychain (if any keychain-related files are generated)
+*.keychain
+*.keychain-db
+
+# Claude CLI configuration
+.claude/
+
+# Test/debug artifacts
+$HOME/

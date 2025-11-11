@@ -9,13 +9,14 @@ Use this brief when onboarding a new autonomous assistant so they inherit the co
 
 ## Technical Baseline
 - **Toolchains:** Rust 1.91.1 (`rustfmt`, `clippy`, `cargo-tauri 2.9.4`), Node ≥22 (currently 25.1.0), Vue 3.5.24 + Vite 7.2, Vitest for frontend tests.
-- **Workspace Layout:**  
-  - `src-tauri/src/lib.rs` — Tauri builder, plugin wiring.  
-  - `src-tauri/src/state.rs` — AppState/bootstrap (`StorageManager`, `LocalAiOrchestrator`).  
-  - `src-tauri/src/commands/` — IPC handlers (`protocols.rs`, `ai.rs`).  
-  - `crates/core` — SQLite storage, envelope encryption, protocol tests.  
-  - `crates/local-ai` — Codex/Claude CLI orchestrator with provider-chain tests.  
-  - `frontend/src` — `App.vue` plus components (`ProtocolList`, `ProtocolForm`, `AiSummaryPanel`) and Vitest specs.
+- **Workspace Layout:**
+  - `src-tauri/src/lib.rs` — Tauri builder, plugin wiring.
+  - `src-tauri/src/state.rs` — AppState/bootstrap (`StorageManager`, `LocalAiOrchestrator`).
+  - `src-tauri/src/commands/` — IPC handlers (`protocols.rs`, `ai.rs`, `backup.rs`, `scheduler_v2.rs`, `drive.rs`, `restore.rs`).
+  - `crates/core` — SQLite storage, envelope encryption, protocol tests.
+  - `crates/local-ai` — Codex/Claude CLI orchestrator with provider-chain tests.
+  - `frontend/src` — `App.vue` plus components (`Settings`, `Toast`, `DoseTracker`, `LiteratureSearch`, etc.) and Vitest specs.
+  - `frontend/src/utils/` — Error handling utilities (`errorHandling.ts`) for user-friendly toast notifications.
 - **Data Paths:** `~/Library/Application Support/PepTrack/peptrack.sqlite` for data, `peptrack.key` for ChaCha20-Poly1305 key bytes. Respect filesystem permissions; never commit secrets.
 
 ## Operating Rules
@@ -44,11 +45,21 @@ Use this brief when onboarding a new autonomous assistant so they inherit the co
 - When uncertain, leave breadcrumbs in `docs/` (future-self, personas) so successors understand reasoning.
 - Surface open questions or assumptions explicitly instead of guessing—privacy and correctness trump speed.
 
-## Immediate Focus Areas
-1. Supplier/inventory tracking (schema, commands, UI, alerts).
-2. Dose logging UX + analytics.
-3. Literature ingestion (PubMed/OpenAlex/Crossref) feeding the AI panel.
-4. macOS Keychain migration for secret storage.
-5. Background reminders (LaunchAgents/sidecars) plus richer test coverage.
+## Completed Features
+- ✅ Dose logging UX with full calendar views and history tracking
+- ✅ Literature search integration (PubMed, OpenAlex, Crossref) with caching
+- ✅ Comprehensive backup system:
+  - Manual and scheduled automatic backups (hourly/daily/weekly)
+  - Google Drive OAuth integration for cloud backups
+  - Backup compression, cleanup policies, restore with preview
+  - Desktop notifications for backup events
+  - Intelligent error handling with user-friendly toast notifications
+
+## Current Focus Areas
+1. Supplier/inventory tracking (schema, commands, UI, cost-per-mg, stock alerts).
+2. macOS Keychain migration for secret storage (see `docs/keychain_migration_plan.md`).
+3. Background reminders (LaunchAgents/sidecars) for dose reminders and vial-expiry notifications.
+4. Cloud restore functionality (restore directly from Google Drive).
+5. Multi-cloud support (Dropbox, OneDrive) and optional backup encryption.
 
 Follow this persona to keep velocity high while preserving the security-first, fully-local ethos of PepTrack.***
