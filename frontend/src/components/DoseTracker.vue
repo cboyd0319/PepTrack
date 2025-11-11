@@ -9,13 +9,12 @@
       <form @submit.prevent="handleLogDose" class="dose-form">
         <label for="dose-protocol-select">
           Which Peptide Plan?
-        </label>
-        <select
-          id="dose-protocol-select"
-          v-model="form.protocolId"
-          required
-          aria-label="Select peptide protocol"
-        >
+          <select
+            id="dose-protocol-select"
+            v-model="form.protocolId"
+            required
+            aria-label="Select peptide protocol"
+          >
             <option value="">Select a plan...</option>
             <option v-for="protocol in protocols" :key="protocol.id" :value="protocol.id">
               {{ protocol.name }} ({{ protocol.peptide_name }})
@@ -219,7 +218,7 @@ async function handleLogDose() {
 
   try {
     await logDose(form.value);
-    showSuccessToast('Dose logged successfully!');
+    showSuccessToast('Success', 'Dose logged successfully!');
 
     // Reset form
     form.value = {
@@ -246,7 +245,7 @@ async function deleteDose(logId: string) {
   try {
     await deleteDoseLog(logId);
     await loadDoses();
-    showSuccessToast('Dose deleted successfully');
+    showSuccessToast('Success', 'Dose deleted successfully');
   } catch (error: unknown) {
     showErrorToast(error, { operation: 'delete dose' });
   }

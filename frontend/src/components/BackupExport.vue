@@ -5,6 +5,9 @@ import { exportBackupData } from "../api/peptrack";
 const exporting = ref(false);
 const exportMessage = ref<string | null>(null);
 const exportError = ref<string | null>(null);
+const useEncryption = ref(false);
+const password = ref("");
+const confirmPassword = ref("");
 
 async function handleExport() {
   exporting.value = true;
@@ -12,12 +15,31 @@ async function handleExport() {
   exportError.value = null;
 
   try {
-    // Get the backup data
-    const backupData = await exportBackupData();
+    // Validate password if encryption is enabled
+    if (useEncryption.value) {
+      if (!password.value) {
+        exportError.value = "Please enter a password for encryption";
+        return;
+      }
+      if (password.value !== confirmPassword.value) {
+        exportError.value = "Passwords do not match";
+        return;
+      }
+      if (password.value.length < 8) {
+        exportError.value = "Password must be at least 8 characters";
+        return;
+      }
+    }
 
-    // Create JSON blob
-    const jsonContent = JSON.stringify(backupData, null, 2);
-    const blob = new Blob([jsonContent], { type: "application/json" });
+    // Get the backup data (JSON string)
+    const backupJson = await exportBackupData(useEncryption.value ? password.value : undefined);
+
+    // Parse to get metadata for success message
+    const backupData = JSON.parse(backupJson);
+    const metadata = backupData.metadata || backupData;
+
+    // Create blob from JSON string
+    const blob = new Blob([backupJson], { type: "application/json" });
 
     // Create download link
     const url = URL.createObjectURL(blob);
@@ -26,7 +48,8 @@ async function handleExport() {
     // Generate filename with timestamp
     const now = new Date();
     const timestamp = now.toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
-    link.download = `peptrack_backup_${timestamp}.json`;
+    const suffix = useEncryption.value ? '_encrypted' : '';
+    link.download = `peptrack_backup_${timestamp}${suffix}.json`;
     link.href = url;
 
     // Trigger download
@@ -37,7 +60,14 @@ async function handleExport() {
     // Clean up
     URL.revokeObjectURL(url);
 
-    exportMessage.value = `✅ Backup downloaded successfully! (${backupData.metadata.protocolsCount} protocols, ${backupData.metadata.dosesCount} doses, ${backupData.metadata.literatureCount} papers)`;
+    const encryptionNote = useEncryption.value ? " 🔒 (encrypted)" : "";
+    exportMessage.value = `✅ Backup downloaded successfully${encryptionNote}! (${metadata.protocolsCount || 0} protocols, ${metadata.dosesCount || 0} doses, ${metadata.literatureCount || 0} papers)`;
+
+    // Clear password fields after successful export
+    if (useEncryption.value) {
+      password.value = "";
+      confirmPassword.value = "";
+    }
 
   } catch (error) {
     exportError.value = `Failed to export backup: ${String(error)}`;
@@ -67,6 +97,45 @@ async function handleExport() {
         <p class="backup-note">
           💡 The backup file is saved as JSON and can be kept safe for restoring your data later.
         </p>
+      </div>
+
+      <div class="encryption-section">
+        <label class="encryption-checkbox">
+          <input
+            type="checkbox"
+            v-model="useEncryption"
+            :disabled="exporting"
+          />
+          <span>🔒 Encrypt backup with password</span>
+        </label>
+
+        <div v-if="useEncryption" class="password-inputs">
+          <div class="input-group">
+            <label for="password">Password:</label>
+            <input
+              id="password"
+              type="password"
+              v-model="password"
+              placeholder="Enter password (min 8 characters)"
+              :disabled="exporting"
+              autocomplete="new-password"
+            />
+          </div>
+          <div class="input-group">
+            <label for="confirmPassword">Confirm Password:</label>
+            <input
+              id="confirmPassword"
+              type="password"
+              v-model="confirmPassword"
+              placeholder="Re-enter password"
+              :disabled="exporting"
+              autocomplete="new-password"
+            />
+          </div>
+          <p class="encryption-note">
+            🔑 <strong>Important:</strong> Keep this password safe! You'll need it to restore the backup. If you lose the password, the backup cannot be recovered.
+          </p>
+        </div>
       </div>
 
       <button
@@ -145,6 +214,84 @@ async function handleExport() {
   font-size: 13px;
   color: #856404;
   margin-top: 12px !important;
+}
+
+.encryption-section {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+  border: 1px solid #dee2e6;
+}
+
+.encryption-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 500;
+  color: #333;
+}
+
+.encryption-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.encryption-checkbox input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.password-inputs {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #dee2e6;
+}
+
+.input-group {
+  margin-bottom: 12px;
+}
+
+.input-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #495057;
+}
+
+.input-group input[type="password"] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.input-group input[type="password"]:focus {
+  outline: none;
+  border-color: #80bdff;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.input-group input[type="password"]:disabled {
+  background-color: #e9ecef;
+  cursor: not-allowed;
+}
+
+.encryption-note {
+  background: #fff3cd;
+  padding: 10px;
+  border-radius: 6px;
+  border-left: 3px solid #ff9800;
+  font-size: 13px;
+  color: #856404;
+  margin-top: 12px;
+  margin-bottom: 0;
 }
 
 .export-btn {

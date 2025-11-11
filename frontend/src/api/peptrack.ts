@@ -167,8 +167,8 @@ export interface BackupData {
 
 // Backup API calls
 
-export async function exportBackupData() {
-  return invoke<BackupData>("export_backup_data");
+export async function exportBackupData(password?: string) {
+  return invoke<string>("export_backup_data", { password: password || null });
 }
 
 export async function getBackupFilePath() {
@@ -314,12 +314,12 @@ export async function getBackupProgress() {
 
 // Restore API calls
 
-export async function restoreFromBackup(filePath: string) {
-  return invoke<RestoreResult>("restore_from_backup", { filePath });
+export async function restoreFromBackup(filePath: string, password?: string) {
+  return invoke<RestoreResult>("restore_from_backup", { filePath, password: password || null });
 }
 
-export async function previewBackup(filePath: string) {
-  return invoke<BackupPreview>("preview_backup", { filePath });
+export async function previewBackup(filePath: string, password?: string) {
+  return invoke<BackupPreview>("preview_backup", { filePath, password: password || null });
 }
 
 // Supplier types

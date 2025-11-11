@@ -15,12 +15,18 @@ const loading = ref(false);
 const restoring = ref(false);
 const error = ref<string | null>(null);
 const showConfirmDialog = ref(false);
+const isEncrypted = ref(false);
+const password = ref("");
+const needsPassword = ref(false);
 
 async function selectBackupFile() {
   loading.value = true;
   error.value = null;
   preview.value = null;
   restoreResult.value = null;
+  isEncrypted.value = false;
+  needsPassword.value = false;
+  password.value = "";
 
   try {
     const selected = await open({
@@ -49,13 +55,31 @@ async function loadPreview(filePath: string) {
   error.value = null;
 
   try {
-    preview.value = await previewBackup(filePath);
+    preview.value = await previewBackup(filePath, password.value || undefined);
+    isEncrypted.value = !!password.value;
+    needsPassword.value = false;
   } catch (err) {
-    error.value = `Failed to preview backup: ${String(err)}`;
-    selectedFile.value = null;
+    const errorMsg = String(err);
+    // Check if error is due to encryption
+    if (errorMsg.includes("encrypted") || errorMsg.includes("password")) {
+      isEncrypted.value = true;
+      needsPassword.value = true;
+      error.value = "🔒 This backup is encrypted. Please enter the password to continue.";
+    } else {
+      error.value = `Failed to preview backup: ${errorMsg}`;
+      selectedFile.value = null;
+    }
   } finally {
     loading.value = false;
   }
+}
+
+async function submitPassword() {
+  if (!selectedFile.value || !password.value) {
+    error.value = "Please enter a password";
+    return;
+  }
+  await loadPreview(selectedFile.value);
 }
 
 function confirmRestore() {
@@ -75,7 +99,14 @@ async function performRestore() {
   restoreResult.value = null;
 
   try {
-    restoreResult.value = await restoreFromBackup(selectedFile.value);
+    restoreResult.value = await restoreFromBackup(
+      selectedFile.value,
+      isEncrypted.value ? password.value : undefined
+    );
+    // Clear password after successful restore
+    if (isEncrypted.value) {
+      password.value = "";
+    }
   } catch (err) {
     error.value = `Restore failed: ${String(err)}`;
   } finally {
@@ -89,6 +120,9 @@ function reset() {
   restoreResult.value = null;
   error.value = null;
   showConfirmDialog.value = false;
+  isEncrypted.value = false;
+  needsPassword.value = false;
+  password.value = "";
 }
 
 function formatDate(dateStr: string): string {
@@ -132,6 +166,53 @@ function getFileName(path: string | null): string {
         </p>
       </div>
 
+      <!-- Password Input (when encrypted backup is detected) -->
+      <div v-if="selectedFile && needsPassword && !preview" class="password-section">
+        <div class="password-header">
+          <h3>🔒 Encrypted Backup</h3>
+          <button
+            @click="reset"
+            class="reset-btn"
+            aria-label="Select a different backup file"
+          >
+            ↻ Select Different File
+          </button>
+        </div>
+
+        <div class="password-card">
+          <div class="password-row">
+            <span class="password-label">📁 File:</span>
+            <span class="password-value filename">{{ getFileName(selectedFile) }}</span>
+          </div>
+        </div>
+
+        <div class="password-prompt">
+          <p class="password-instruction">
+            This backup is protected with a password. Enter the password to preview and restore the backup.
+          </p>
+          <div class="input-group">
+            <label for="restore-password">Password:</label>
+            <input
+              id="restore-password"
+              type="password"
+              v-model="password"
+              placeholder="Enter backup password"
+              :disabled="loading"
+              autocomplete="off"
+              @keyup.enter="submitPassword"
+            />
+          </div>
+          <button
+            @click="submitPassword"
+            :disabled="loading || !password"
+            class="submit-password-btn"
+            aria-label="Submit password to decrypt backup"
+          >
+            {{ loading ? "⏳ Decrypting..." : "🔓 Unlock Backup" }}
+          </button>
+        </div>
+      </div>
+
       <!-- Preview Section -->
       <div v-if="preview && !restoreResult" class="preview-section">
         <div class="preview-header">
@@ -143,6 +224,10 @@ function getFileName(path: string | null): string {
           >
             ↻ Select Different File
           </button>
+        </div>
+
+        <div v-if="isEncrypted" class="encrypted-badge">
+          🔒 This backup is encrypted
         </div>
 
         <div class="preview-card">
@@ -344,6 +429,134 @@ function getFileName(path: string | null): string {
   margin-top: 12px;
   font-size: 13px;
   color: #666;
+}
+
+.password-section {
+  animation: fadeIn 0.3s ease;
+}
+
+.password-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.password-header h3 {
+  margin: 0;
+  color: #333;
+  font-size: 20px;
+}
+
+.password-card {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+  border: 2px solid #ffc107;
+}
+
+.password-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+}
+
+.password-label {
+  font-weight: 600;
+  color: #555;
+}
+
+.password-value.filename {
+  font-family: monospace;
+  background: #fff;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #333;
+}
+
+.password-prompt {
+  background: #fff8e1;
+  border-radius: 8px;
+  padding: 20px;
+  border: 2px solid #ffc107;
+}
+
+.password-instruction {
+  margin: 0 0 16px 0;
+  color: #333;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.input-group {
+  margin-bottom: 16px;
+}
+
+.input-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #495057;
+}
+
+.input-group input[type="password"] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.input-group input[type="password"]:focus {
+  outline: none;
+  border-color: #80bdff;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.input-group input[type="password"]:disabled {
+  background-color: #e9ecef;
+  cursor: not-allowed;
+}
+
+.submit-password-btn {
+  width: 100%;
+  padding: 12px 24px;
+  background-color: #ffc107;
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.submit-password-btn:hover:not(:disabled) {
+  background-color: #ffca28;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255, 193, 7, 0.3);
+}
+
+.submit-password-btn:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.encrypted-badge {
+  background: #fff3cd;
+  color: #856404;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  border: 1px solid #ffc107;
+  display: inline-block;
 }
 
 .preview-section {

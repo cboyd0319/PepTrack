@@ -91,9 +91,12 @@ async function handleBackupToDrive() {
   message.value = null;
 
   try {
-    // Get backup data
-    const backupData = await exportBackupData();
-    const jsonContent = JSON.stringify(backupData, null, 2);
+    // Get backup data (returns JSON string)
+    const backupJson = await exportBackupData();
+
+    // Parse to get metadata for success message
+    const backupData = JSON.parse(backupJson);
+    const metadata = backupData.metadata || backupData;
 
     // Generate filename
     const now = new Date();
@@ -101,9 +104,9 @@ async function handleBackupToDrive() {
     const filename = `peptrack_backup_${timestamp}.json`;
 
     // Upload to Drive
-    await uploadToDrive(filename, jsonContent);
+    await uploadToDrive(filename, backupJson);
 
-    message.value = `✅ Backup uploaded to Google Drive successfully! (${backupData.metadata.protocolsCount} protocols, ${backupData.metadata.dosesCount} doses, ${backupData.metadata.literatureCount} papers)`;
+    message.value = `✅ Backup uploaded to Google Drive successfully! (${metadata.protocolsCount || 0} protocols, ${metadata.dosesCount || 0} doses, ${metadata.literatureCount || 0} papers)`;
 
   } catch (error) {
     errorMessage.value = `Failed to upload backup: ${String(error)}`;
