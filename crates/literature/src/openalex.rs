@@ -107,7 +107,9 @@ impl LiteratureFetcher for OpenAlexFetcher {
                     doi,
                     authors,
                     published_date: work.publication_date,
-                    journal: work.primary_location.and_then(|loc| loc.source.map(|s| s.display_name)),
+                    journal: work
+                        .primary_location
+                        .and_then(|loc| loc.source.map(|s| s.display_name)),
                     abstract_text: work.abstract_inverted_index.map(|_| {
                         // OpenAlex stores abstracts as inverted indexes for compression
                         // For simplicity, we'll skip reconstruction for now

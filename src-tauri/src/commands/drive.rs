@@ -117,8 +117,7 @@ pub async fn complete_drive_oauth(
         .clone()
         .ok_or_else(|| "PKCE verifier not found".to_string())?;
 
-    let client = create_oauth_client(&config)
-        .map_err(|e| format!("OAuth setup failed: {}", e))?;
+    let client = create_oauth_client(&config).map_err(|e| format!("OAuth setup failed: {}", e))?;
 
     // Exchange authorization code for tokens
     let pkce_verifier = oauth2::PkceCodeVerifier::new(pkce_verifier);
@@ -166,7 +165,9 @@ pub async fn complete_drive_oauth(
 
 /// Checks Google Drive connection status
 #[tauri::command]
-pub async fn check_drive_status(state: State<'_, std::sync::Arc<AppState>>) -> Result<DriveStatus, String> {
+pub async fn check_drive_status(
+    state: State<'_, std::sync::Arc<AppState>>,
+) -> Result<DriveStatus, String> {
     // Try to load and refresh tokens if needed
     let tokens = load_and_refresh_tokens(&state).await;
 
@@ -218,9 +219,15 @@ pub async fn upload_to_drive(
         .map_err(|e| format!("Failed to create folder: {}", e))?;
 
     // Upload file
-    let file_id = upload_file(&client, &tokens.access_token, &folder_id, &filename, &content)
-        .await
-        .map_err(|e| format!("Failed to upload file: {}", e))?;
+    let file_id = upload_file(
+        &client,
+        &tokens.access_token,
+        &folder_id,
+        &filename,
+        &content,
+    )
+    .await
+    .map_err(|e| format!("Failed to upload file: {}", e))?;
 
     info!("Backup uploaded successfully: {}", file_id);
     Ok(file_id)
@@ -247,8 +254,7 @@ async fn store_drive_tokens(_state: &AppState, tokens: &DriveTokens) -> Result<(
 
     let tokens_file = data_dir.join("drive_tokens.json");
     let json = serde_json::to_string(tokens)?;
-    std::fs::write(&tokens_file, json)
-        .context("Failed to store Drive tokens")?;
+    std::fs::write(&tokens_file, json).context("Failed to store Drive tokens")?;
 
     Ok(())
 }
@@ -261,8 +267,7 @@ async fn store_drive_config(config: &DriveOAuthConfig) -> Result<()> {
 
     let config_file = data_dir.join("drive_oauth_config.json");
     let json = serde_json::to_string(config)?;
-    std::fs::write(&config_file, json)
-        .context("Failed to store Drive OAuth config")?;
+    std::fs::write(&config_file, json).context("Failed to store Drive OAuth config")?;
 
     Ok(())
 }
@@ -273,8 +278,7 @@ async fn load_drive_config() -> Result<DriveOAuthConfig> {
         .join("PepTrack");
     let config_file = data_dir.join("drive_oauth_config.json");
 
-    let json = std::fs::read_to_string(&config_file)
-        .context("Drive OAuth config not found")?;
+    let json = std::fs::read_to_string(&config_file).context("Drive OAuth config not found")?;
     let config: DriveOAuthConfig = serde_json::from_str(&json)?;
     Ok(config)
 }
@@ -285,8 +289,7 @@ async fn load_drive_tokens(_state: &AppState) -> Result<DriveTokens> {
         .join("PepTrack");
     let tokens_file = data_dir.join("drive_tokens.json");
 
-    let json = std::fs::read_to_string(&tokens_file)
-        .context("Drive tokens not found")?;
+    let json = std::fs::read_to_string(&tokens_file).context("Drive tokens not found")?;
     let tokens: DriveTokens = serde_json::from_str(&json)?;
     Ok(tokens)
 }
@@ -305,14 +308,12 @@ async fn delete_drive_tokens(_state: &AppState) -> Result<()> {
     let config_file = data_dir.join("drive_oauth_config.json");
 
     if tokens_file.exists() {
-        std::fs::remove_file(&tokens_file)
-            .context("Failed to delete Drive tokens")?;
+        std::fs::remove_file(&tokens_file).context("Failed to delete Drive tokens")?;
     }
 
     // Also delete the OAuth config
     if config_file.exists() {
-        std::fs::remove_file(&config_file)
-            .context("Failed to delete Drive OAuth config")?;
+        std::fs::remove_file(&config_file).context("Failed to delete Drive OAuth config")?;
     }
 
     Ok(())
@@ -403,7 +404,9 @@ async fn load_and_refresh_tokens(state: &AppState) -> Result<DriveTokens> {
                         Err(e) => {
                             warn!("Failed to refresh token: {:#}", e);
                             // Return error - user needs to re-authenticate
-                            return Err(e.context("Token refresh failed - please reconnect Google Drive"));
+                            return Err(
+                                e.context("Token refresh failed - please reconnect Google Drive")
+                            );
                         }
                     }
                 }
@@ -414,7 +417,9 @@ async fn load_and_refresh_tokens(state: &AppState) -> Result<DriveTokens> {
             }
         } else {
             warn!("No refresh token available");
-            return Err(anyhow::anyhow!("No refresh token available - please reconnect Google Drive"));
+            return Err(anyhow::anyhow!(
+                "No refresh token available - please reconnect Google Drive"
+            ));
         }
     }
 
@@ -871,7 +876,9 @@ mod tests {
     fn test_token_expiry_detection_expired() {
         // Token expired 10 minutes ago
         let past_time = time::OffsetDateTime::now_utc() - time::Duration::minutes(10);
-        let expires_at = past_time.format(&time::format_description::well_known::Rfc3339).unwrap();
+        let expires_at = past_time
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap();
 
         let tokens = DriveTokens {
             access_token: "test_token".to_string(),
@@ -880,14 +887,19 @@ mod tests {
             expires_at: Some(expires_at),
         };
 
-        assert!(should_refresh_token(&tokens), "Expired token should require refresh");
+        assert!(
+            should_refresh_token(&tokens),
+            "Expired token should require refresh"
+        );
     }
 
     #[test]
     fn test_token_expiry_detection_expires_soon() {
         // Token expires in 2 minutes (less than 5 minute buffer)
         let soon = time::OffsetDateTime::now_utc() + time::Duration::minutes(2);
-        let expires_at = soon.format(&time::format_description::well_known::Rfc3339).unwrap();
+        let expires_at = soon
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap();
 
         let tokens = DriveTokens {
             access_token: "test_token".to_string(),
@@ -896,14 +908,19 @@ mod tests {
             expires_at: Some(expires_at),
         };
 
-        assert!(should_refresh_token(&tokens), "Token expiring soon should require refresh");
+        assert!(
+            should_refresh_token(&tokens),
+            "Token expiring soon should require refresh"
+        );
     }
 
     #[test]
     fn test_token_expiry_detection_still_valid() {
         // Token expires in 30 minutes (more than 5 minute buffer)
         let future = time::OffsetDateTime::now_utc() + time::Duration::minutes(30);
-        let expires_at = future.format(&time::format_description::well_known::Rfc3339).unwrap();
+        let expires_at = future
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap();
 
         let tokens = DriveTokens {
             access_token: "test_token".to_string(),
@@ -912,7 +929,10 @@ mod tests {
             expires_at: Some(expires_at),
         };
 
-        assert!(!should_refresh_token(&tokens), "Valid token should not require refresh");
+        assert!(
+            !should_refresh_token(&tokens),
+            "Valid token should not require refresh"
+        );
     }
 
     #[test]
@@ -925,7 +945,10 @@ mod tests {
             expires_at: None,
         };
 
-        assert!(should_refresh_token(&tokens), "Token without expiry info should require refresh");
+        assert!(
+            should_refresh_token(&tokens),
+            "Token without expiry info should require refresh"
+        );
     }
 
     #[test]
@@ -938,14 +961,19 @@ mod tests {
             expires_at: Some("invalid-date-format".to_string()),
         };
 
-        assert!(should_refresh_token(&tokens), "Token with invalid expiry format should require refresh");
+        assert!(
+            should_refresh_token(&tokens),
+            "Token with invalid expiry format should require refresh"
+        );
     }
 
     #[test]
     fn test_token_expiry_detection_exactly_at_buffer() {
         // Token expires in exactly 5 minutes (at the buffer boundary)
         let boundary = time::OffsetDateTime::now_utc() + time::Duration::minutes(5);
-        let expires_at = boundary.format(&time::format_description::well_known::Rfc3339).unwrap();
+        let expires_at = boundary
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap();
 
         let tokens = DriveTokens {
             access_token: "test_token".to_string(),
@@ -955,6 +983,9 @@ mod tests {
         };
 
         // At the boundary, should require refresh (now + buffer >= expires_at)
-        assert!(should_refresh_token(&tokens), "Token at buffer boundary should require refresh");
+        assert!(
+            should_refresh_token(&tokens),
+            "Token at buffer boundary should require refresh"
+        );
     }
 }

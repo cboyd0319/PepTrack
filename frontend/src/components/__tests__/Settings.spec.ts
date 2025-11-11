@@ -43,7 +43,7 @@ describe("Settings", () => {
 
     // First tab should be active by default
     const tabs = wrapper.findAll(".tab-button");
-    expect(tabs[0].classes()).toContain("active");
+    expect(tabs[0]?.classes()).toContain("active");
   });
 
   it("switches tabs when clicked", async () => {
@@ -52,12 +52,12 @@ describe("Settings", () => {
     const tabs = wrapper.findAll(".tab-button");
 
     // Click on Google Drive tab (second tab)
-    await tabs[1].trigger("click");
+    await tabs[1]?.trigger("click");
     await wrapper.vm.$nextTick();
 
     // Second tab should now be active
-    expect(tabs[1].classes()).toContain("active");
-    expect(tabs[0].classes()).not.toContain("active");
+    expect(tabs[1]?.classes()).toContain("active");
+    expect(tabs[0]?.classes()).not.toContain("active");
   });
 
   it("renders correct tab content", async () => {
@@ -68,7 +68,7 @@ describe("Settings", () => {
 
     // Switch to Drive tab
     const tabs = wrapper.findAll(".tab-button");
-    await tabs[1].trigger("click");
+    await tabs[1]?.trigger("click");
     await wrapper.vm.$nextTick();
 
     // Should now show Google Drive content
@@ -81,15 +81,15 @@ describe("Settings", () => {
 
     // Test each tab
     for (let i = 0; i < tabs.length; i++) {
-      await tabs[i].trigger("click");
+      await tabs[i]?.trigger("click");
       await wrapper.vm.$nextTick();
 
       // Only the clicked tab should be active
-      expect(tabs[i].classes()).toContain("active");
+      expect(tabs[i]?.classes()).toContain("active");
 
       for (let j = 0; j < tabs.length; j++) {
         if (i !== j) {
-          expect(tabs[j].classes()).not.toContain("active");
+          expect(tabs[j]?.classes()).not.toContain("active");
         }
       }
     }
@@ -100,14 +100,14 @@ describe("Settings", () => {
     const tabs = wrapper.findAll(".tab-button");
 
     // Switch to notifications tab
-    await tabs[4].trigger("click");
+    await tabs[4]?.trigger("click");
     await wrapper.vm.$nextTick();
 
     // Force re-render
     await wrapper.vm.$forceUpdate();
 
     // Tab should still be active
-    expect(tabs[4].classes()).toContain("active");
+    expect(tabs[4]?.classes()).toContain("active");
   });
 
   it("has proper accessibility attributes", () => {
@@ -133,7 +133,7 @@ describe("Settings", () => {
     const tabs = wrapper.findAll(".tab-button");
 
     // Navigate to notifications tab
-    await tabs[4].trigger("click");
+    await tabs[4]?.trigger("click");
     await wrapper.vm.$nextTick();
 
     // The NotificationPreferences component should be rendered

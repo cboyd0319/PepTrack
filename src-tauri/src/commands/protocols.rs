@@ -16,7 +16,9 @@ pub struct ProtocolPayload {
 }
 
 #[tauri::command]
-pub async fn list_protocols(state: State<'_, std::sync::Arc<AppState>>) -> Result<Vec<PeptideProtocol>, String> {
+pub async fn list_protocols(
+    state: State<'_, std::sync::Arc<AppState>>,
+) -> Result<Vec<PeptideProtocol>, String> {
     state
         .storage
         .list_protocols()

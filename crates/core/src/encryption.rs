@@ -292,7 +292,10 @@ mod tests {
 
         let result = encryption.open(&sealed);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("decryption failed"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("decryption failed"));
     }
 
     #[test]
@@ -321,7 +324,10 @@ mod tests {
         // Try to decrypt with wrong key
         let result = encryption2.open(&sealed);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("decryption failed"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("decryption failed"));
     }
 
     #[test]

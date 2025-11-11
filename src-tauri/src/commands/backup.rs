@@ -37,29 +37,20 @@ pub async fn export_backup_data(
     info!("Starting backup export (encrypted: {})", password.is_some());
 
     // Load all data from storage
-    let protocols = state
-        .storage
-        .list_protocols()
-        .map_err(|e| {
-            warn!("Failed to load protocols for backup: {:#}", e);
-            format!("Could not load protocols: {}", e)
-        })?;
+    let protocols = state.storage.list_protocols().map_err(|e| {
+        warn!("Failed to load protocols for backup: {:#}", e);
+        format!("Could not load protocols: {}", e)
+    })?;
 
-    let doses = state
-        .storage
-        .list_dose_logs()
-        .map_err(|e| {
-            warn!("Failed to load dose logs for backup: {:#}", e);
-            format!("Could not load dose logs: {}", e)
-        })?;
+    let doses = state.storage.list_dose_logs().map_err(|e| {
+        warn!("Failed to load dose logs for backup: {:#}", e);
+        format!("Could not load dose logs: {}", e)
+    })?;
 
-    let literature = state
-        .storage
-        .list_literature()
-        .map_err(|e| {
-            warn!("Failed to load literature for backup: {:#}", e);
-            format!("Could not load literature: {}", e)
-        })?;
+    let literature = state.storage.list_literature().map_err(|e| {
+        warn!("Failed to load literature for backup: {:#}", e);
+        format!("Could not load literature: {}", e)
+    })?;
 
     let metadata = BackupMetadata {
         export_date: OffsetDateTime::now_utc().to_string(),

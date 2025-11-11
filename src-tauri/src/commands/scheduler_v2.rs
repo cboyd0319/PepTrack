@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
-use flate2::Compression;
-use flate2::write::GzEncoder;
 use flate2::read::GzDecoder;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use serde::{Deserialize, Serialize};
-use std::io::{Write as _, Read as _};
+use std::io::{Read as _, Write as _};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 use tauri_plugin_notification::NotificationExt;
@@ -20,7 +20,9 @@ use crate::state::AppState;
 pub enum BackupFrequency {
     Hourly,
     /// Daily at a specific hour (0-23)
-    DailyAt { hour: u8 },
+    DailyAt {
+        hour: u8,
+    },
     Weekly,
     Manual,
 }
@@ -212,7 +214,10 @@ impl SchedulerState {
 
                 // Check if it's time to backup
                 if let Some(next_backup_str) = &schedule.next_backup {
-                    match OffsetDateTime::parse(next_backup_str, &time::format_description::well_known::Rfc3339) {
+                    match OffsetDateTime::parse(
+                        next_backup_str,
+                        &time::format_description::well_known::Rfc3339,
+                    ) {
                         Ok(next_backup_time) => {
                             let now = OffsetDateTime::now_utc();
 
@@ -227,17 +232,21 @@ impl SchedulerState {
                                         &history_arc,
                                         &progress_arc,
                                         &notif_state,
-                                    ).await {
+                                    )
+                                    .await
+                                    {
                                         error!("Scheduled backup failed: {:#}", e);
                                         notif_state.send_notification(
                                             "❌ Scheduled Backup Failed",
                                             &format!("Automatic backup failed: {}. Will retry next cycle.", e)
                                         ).await;
                                     } else {
-                                        notif_state.send_notification(
-                                            "✅ Scheduled Backup Complete",
-                                            "Automatic backup completed successfully"
-                                        ).await;
+                                        notif_state
+                                            .send_notification(
+                                                "✅ Scheduled Backup Complete",
+                                                "Automatic backup completed successfully",
+                                            )
+                                            .await;
                                     }
                                 } else {
                                     warn!("Backup already in progress, skipping");
@@ -269,7 +278,9 @@ impl SchedulerState {
         info!("Triggering backup on app close");
 
         // Try to acquire lock
-        let _guard = self.backup_lock.try_lock()
+        let _guard = self
+            .backup_lock
+            .try_lock()
             .map_err(|_| anyhow::anyhow!("Backup already in progress"))?;
 
         perform_scheduled_backup_with_retry(
@@ -278,7 +289,8 @@ impl SchedulerState {
             &self.history,
             &self.progress,
             self,
-        ).await?;
+        )
+        .await?;
 
         Ok(())
     }
@@ -286,21 +298,27 @@ impl SchedulerState {
 
 /// Gets the current backup schedule
 #[tauri::command]
-pub async fn get_backup_schedule(state: State<'_, SchedulerState>) -> Result<BackupSchedule, String> {
+pub async fn get_backup_schedule(
+    state: State<'_, SchedulerState>,
+) -> Result<BackupSchedule, String> {
     let schedule = state.schedule.read().await.clone();
     Ok(schedule)
 }
 
 /// Gets backup history
 #[tauri::command]
-pub async fn get_backup_history(state: State<'_, SchedulerState>) -> Result<Vec<BackupHistoryEntry>, String> {
+pub async fn get_backup_history(
+    state: State<'_, SchedulerState>,
+) -> Result<Vec<BackupHistoryEntry>, String> {
     let history = state.history.read().await.clone();
     Ok(history)
 }
 
 /// Gets current backup progress
 #[tauri::command]
-pub async fn get_backup_progress(state: State<'_, SchedulerState>) -> Result<BackupProgress, String> {
+pub async fn get_backup_progress(
+    state: State<'_, SchedulerState>,
+) -> Result<BackupProgress, String> {
     let progress = state.progress.read().await.clone();
     Ok(progress)
 }
@@ -345,7 +363,9 @@ pub async fn trigger_manual_backup(
     info!("Manual backup triggered");
 
     // Try to acquire lock
-    let _guard = scheduler_state.backup_lock.try_lock()
+    let _guard = scheduler_state
+        .backup_lock
+        .try_lock()
         .map_err(|_| "A backup is already in progress".to_string())?;
 
     let result = perform_scheduled_backup_with_retry(
@@ -354,22 +374,27 @@ pub async fn trigger_manual_backup(
         &scheduler_state.history,
         &scheduler_state.progress,
         &scheduler_state,
-    ).await;
+    )
+    .await;
 
     match result {
         Ok(msg) => {
-            scheduler_state.send_notification(
-                "✅ Backup Complete",
-                &format!("Manual backup completed successfully. {}", msg)
-            ).await;
+            scheduler_state
+                .send_notification(
+                    "✅ Backup Complete",
+                    &format!("Manual backup completed successfully. {}", msg),
+                )
+                .await;
             Ok(msg)
         }
         Err(e) => {
             let error_msg = format!("Backup failed: {}", e);
-            scheduler_state.send_notification(
-                "❌ Backup Failed",
-                &format!("Manual backup failed. {}", error_msg)
-            ).await;
+            scheduler_state
+                .send_notification(
+                    "❌ Backup Failed",
+                    &format!("Manual backup failed. {}", error_msg),
+                )
+                .await;
             Err(error_msg)
         }
     }
@@ -393,7 +418,7 @@ fn calculate_next_backup(frequency: &BackupFrequency) -> String {
             };
 
             now + time::Duration::hours(hours_until_target as i64)
-        },
+        }
         BackupFrequency::Weekly => now + time::Duration::weeks(1),
         BackupFrequency::Manual => now,
     };
@@ -421,12 +446,7 @@ async fn perform_scheduled_backup_with_retry(
             tokio::time::sleep(tokio::time::Duration::from_secs(wait_secs)).await;
         }
 
-        match perform_single_backup(
-            app_state,
-            &schedule,
-            progress_arc,
-            compress,
-        ).await {
+        match perform_single_backup(app_state, &schedule, progress_arc, compress).await {
             Ok(result) => {
                 // Success! Record history
                 let entry = BackupHistoryEntry {
@@ -508,49 +528,51 @@ async fn perform_single_backup(
         }
 
         match destination {
-            BackupDestination::Local => {
-                match perform_local_backup(app_state, compress).await {
-                    Ok((path, size)) => {
-                        info!("Local backup successful: {}", path);
-                        results.push(format!("Local: {}", path));
-                        total_size += size;
+            BackupDestination::Local => match perform_local_backup(app_state, compress).await {
+                Ok((path, size)) => {
+                    info!("Local backup successful: {}", path);
+                    results.push(format!("Local: {}", path));
+                    total_size += size;
 
-                        let mut progress = progress_arc.write().await;
-                        progress.completed_steps.push(format!("Local backup: {}", path));
-                    }
-                    Err(e) => {
-                        error!("Local backup failed: {:#}", e);
-                        let mut progress = progress_arc.write().await;
-                        progress.failed_steps.push(format!("Local backup: {}", e));
-                        return Err(e);
-                    }
+                    let mut progress = progress_arc.write().await;
+                    progress
+                        .completed_steps
+                        .push(format!("Local backup: {}", path));
                 }
-            }
+                Err(e) => {
+                    error!("Local backup failed: {:#}", e);
+                    let mut progress = progress_arc.write().await;
+                    progress.failed_steps.push(format!("Local backup: {}", e));
+                    return Err(e);
+                }
+            },
             BackupDestination::GoogleDrive => {
                 // Check Drive connection first
                 match check_drive_connection(app_state).await {
-                    Ok(true) => {
-                        match perform_drive_backup(app_state, compress).await {
-                            Ok((file_id, size)) => {
-                                info!("Google Drive backup successful: {}", file_id);
-                                results.push(format!("Drive: {}", file_id));
-                                total_size += size;
+                    Ok(true) => match perform_drive_backup(app_state, compress).await {
+                        Ok((file_id, size)) => {
+                            info!("Google Drive backup successful: {}", file_id);
+                            results.push(format!("Drive: {}", file_id));
+                            total_size += size;
 
-                                let mut progress = progress_arc.write().await;
-                                progress.completed_steps.push(format!("Drive backup: {}", file_id));
-                            }
-                            Err(e) => {
-                                error!("Google Drive backup failed: {:#}", e);
-                                let mut progress = progress_arc.write().await;
-                                progress.failed_steps.push(format!("Drive backup: {}", e));
-                                return Err(e);
-                            }
+                            let mut progress = progress_arc.write().await;
+                            progress
+                                .completed_steps
+                                .push(format!("Drive backup: {}", file_id));
                         }
-                    }
+                        Err(e) => {
+                            error!("Google Drive backup failed: {:#}", e);
+                            let mut progress = progress_arc.write().await;
+                            progress.failed_steps.push(format!("Drive backup: {}", e));
+                            return Err(e);
+                        }
+                    },
                     Ok(false) => {
                         let err = anyhow::anyhow!("Google Drive not connected");
                         let mut progress = progress_arc.write().await;
-                        progress.failed_steps.push("Drive backup: Not connected".to_string());
+                        progress
+                            .failed_steps
+                            .push("Drive backup: Not connected".to_string());
                         return Err(err);
                     }
                     Err(e) => {
@@ -564,7 +586,9 @@ async fn perform_single_backup(
                 // TODO: Implement Dropbox backup
                 warn!("Dropbox backup not yet implemented");
                 let mut progress = progress_arc.write().await;
-                progress.failed_steps.push("Dropbox backup: Not implemented".to_string());
+                progress
+                    .failed_steps
+                    .push("Dropbox backup: Not implemented".to_string());
             }
         }
     }
@@ -578,7 +602,9 @@ async fn perform_single_backup(
             warn!("Cleanup failed: {:#}", e);
             progress.failed_steps.push(format!("Cleanup: {}", e));
         } else {
-            progress.completed_steps.push("Cleanup completed".to_string());
+            progress
+                .completed_steps
+                .push("Cleanup completed".to_string());
         }
     }
 
@@ -705,17 +731,25 @@ async fn perform_drive_backup(state: &AppState, compress: bool) -> Result<(Strin
         (filename, json, size)
     };
 
-    let tokens = drive::load_drive_tokens_internal(state).await
+    let tokens = drive::load_drive_tokens_internal(state)
+        .await
         .context("Google Drive not connected")?;
 
     let client = reqwest::Client::new();
-    let folder_id = drive::get_or_create_folder_internal(&client, &tokens.access_token, "PepTrack Backups")
-        .await
-        .context("Failed to create/get Drive folder")?;
+    let folder_id =
+        drive::get_or_create_folder_internal(&client, &tokens.access_token, "PepTrack Backups")
+            .await
+            .context("Failed to create/get Drive folder")?;
 
-    let file_id = drive::upload_file_internal(&client, &tokens.access_token, &folder_id, &filename, &content)
-        .await
-        .context("Failed to upload to Drive")?;
+    let file_id = drive::upload_file_internal(
+        &client,
+        &tokens.access_token,
+        &folder_id,
+        &filename,
+        &content,
+    )
+    .await
+    .context("Failed to upload to Drive")?;
 
     Ok((file_id, size))
 }
@@ -757,7 +791,9 @@ async fn perform_cleanup(settings: &CleanupSettings) -> Result<()> {
     for entry in entries.flatten() {
         let path = entry.path();
         if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-            if name.starts_with("peptrack_backup_") && (name.ends_with(".json") || name.ends_with(".json.gz")) {
+            if name.starts_with("peptrack_backup_")
+                && (name.ends_with(".json") || name.ends_with(".json.gz"))
+            {
                 if let Ok(metadata) = entry.metadata() {
                     if let Ok(modified) = metadata.modified() {
                         backups.push((path, modified));
@@ -781,7 +817,8 @@ async fn perform_cleanup(settings: &CleanupSettings) -> Result<()> {
 
     // Apply older_than_days rule
     if let Some(days) = settings.older_than_days {
-        let cutoff = std::time::SystemTime::now() - std::time::Duration::from_secs(days as u64 * 86400);
+        let cutoff =
+            std::time::SystemTime::now() - std::time::Duration::from_secs(days as u64 * 86400);
         for (path, modified) in &backups {
             if *modified < cutoff && !to_delete.contains(path) {
                 to_delete.push(path.clone());
@@ -798,7 +835,10 @@ async fn perform_cleanup(settings: &CleanupSettings) -> Result<()> {
     Ok(())
 }
 
-async fn add_history_entry(history_arc: &Arc<RwLock<Vec<BackupHistoryEntry>>>, entry: BackupHistoryEntry) {
+async fn add_history_entry(
+    history_arc: &Arc<RwLock<Vec<BackupHistoryEntry>>>,
+    entry: BackupHistoryEntry,
+) {
     let mut history = history_arc.write().await;
     history.insert(0, entry);
 
@@ -819,8 +859,7 @@ async fn save_schedule_to_disk(schedule: &BackupSchedule) -> Result<()> {
 
     let schedule_file = data_dir.join(SCHEDULE_FILENAME);
     let json = serde_json::to_string_pretty(schedule)?;
-    std::fs::write(&schedule_file, json)
-        .context("Failed to save backup schedule")?;
+    std::fs::write(&schedule_file, json).context("Failed to save backup schedule")?;
 
     Ok(())
 }
@@ -831,8 +870,7 @@ async fn load_schedule_from_disk() -> Result<BackupSchedule> {
         .join("PepTrack");
     let schedule_file = data_dir.join(SCHEDULE_FILENAME);
 
-    let json = std::fs::read_to_string(&schedule_file)
-        .context("Backup schedule not found")?;
+    let json = std::fs::read_to_string(&schedule_file).context("Backup schedule not found")?;
     let schedule: BackupSchedule = serde_json::from_str(&json)?;
     Ok(schedule)
 }
@@ -845,8 +883,7 @@ async fn save_history_to_disk(history: &[BackupHistoryEntry]) -> Result<()> {
 
     let history_file = data_dir.join(HISTORY_FILENAME);
     let json = serde_json::to_string_pretty(history)?;
-    std::fs::write(&history_file, json)
-        .context("Failed to save backup history")?;
+    std::fs::write(&history_file, json).context("Failed to save backup history")?;
 
     Ok(())
 }
@@ -857,8 +894,7 @@ async fn load_history_from_disk() -> Result<Vec<BackupHistoryEntry>> {
         .join("PepTrack");
     let history_file = data_dir.join(HISTORY_FILENAME);
 
-    let json = std::fs::read_to_string(&history_file)
-        .context("Backup history not found")?;
+    let json = std::fs::read_to_string(&history_file).context("Backup history not found")?;
     let history: Vec<BackupHistoryEntry> = serde_json::from_str(&json)?;
     Ok(history)
 }

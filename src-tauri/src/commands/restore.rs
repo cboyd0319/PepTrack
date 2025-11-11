@@ -23,7 +23,10 @@ pub async fn restore_from_backup(
         .map_err(|e| format!("Failed to read backup file: {}", e))?;
 
     // Validate backup
-    if backup_data.protocols.is_empty() && backup_data.dose_logs.is_empty() && backup_data.literature.is_empty() {
+    if backup_data.protocols.is_empty()
+        && backup_data.dose_logs.is_empty()
+        && backup_data.literature.is_empty()
+    {
         return Err("Backup file appears to be empty".to_string());
     }
 
@@ -115,8 +118,8 @@ pub async fn preview_backup(
 // Helper functions
 
 fn read_backup_file(file_path: &str, password: Option<&str>) -> Result<BackupData> {
-    let data = std::fs::read(file_path)
-        .with_context(|| format!("Failed to read file: {}", file_path))?;
+    let data =
+        std::fs::read(file_path).with_context(|| format!("Failed to read file: {}", file_path))?;
 
     // Try to detect if compressed
     let is_gzipped = file_path.ends_with(".gz") || is_gzip_data(&data);
@@ -124,19 +127,18 @@ fn read_backup_file(file_path: &str, password: Option<&str>) -> Result<BackupDat
     let json = if is_gzipped {
         let mut decoder = GzDecoder::new(&data[..]);
         let mut json = String::new();
-        decoder.read_to_string(&mut json)
+        decoder
+            .read_to_string(&mut json)
             .context("Failed to decompress backup file")?;
         json
     } else {
-        String::from_utf8(data)
-            .context("Backup file is not valid UTF-8")?
+        String::from_utf8(data).context("Backup file is not valid UTF-8")?
     };
 
     // Check if encrypted and decrypt if necessary
     let decrypted_json = if peptrack_core::is_encrypted_backup(&json) {
-        let password = password.ok_or_else(|| {
-            anyhow::anyhow!("Backup is encrypted but no password was provided")
-        })?;
+        let password = password
+            .ok_or_else(|| anyhow::anyhow!("Backup is encrypted but no password was provided"))?;
 
         peptrack_core::decrypt_backup(&json, password)
             .context("Failed to decrypt backup - check password")?
@@ -144,8 +146,8 @@ fn read_backup_file(file_path: &str, password: Option<&str>) -> Result<BackupDat
         json
     };
 
-    let backup: BackupData = serde_json::from_str(&decrypted_json)
-        .context("Failed to parse backup file as JSON")?;
+    let backup: BackupData =
+        serde_json::from_str(&decrypted_json).context("Failed to parse backup file as JSON")?;
 
     Ok(backup)
 }
@@ -212,7 +214,10 @@ mod tests {
         let compressed = encoder.finish().unwrap();
 
         // Verify it's detected as gzip
-        assert!(is_gzip_data(&compressed), "Compressed data should be detected as gzip");
+        assert!(
+            is_gzip_data(&compressed),
+            "Compressed data should be detected as gzip"
+        );
 
         // Decompress using GzDecoder (same as read_backup_file logic)
         let mut decoder = GzDecoder::new(&compressed[..]);
@@ -220,7 +225,10 @@ mod tests {
         decoder.read_to_string(&mut decompressed).unwrap();
 
         // Verify round trip
-        assert_eq!(test_data, decompressed, "Decompressed data should match original");
+        assert_eq!(
+            test_data, decompressed,
+            "Decompressed data should match original"
+        );
     }
 
     #[test]
@@ -229,12 +237,17 @@ mod tests {
         use flate2::Compression;
 
         // Create larger test data to verify compression actually reduces size
-        let mut test_data = String::from(r#"{"metadata":{"version":"1.0","timestamp":"2025-01-01T00:00:00Z"},"protocols":["#);
+        let mut test_data = String::from(
+            r#"{"metadata":{"version":"1.0","timestamp":"2025-01-01T00:00:00Z"},"protocols":["#,
+        );
         for i in 0..100 {
             if i > 0 {
                 test_data.push(',');
             }
-            test_data.push_str(&format!(r#"{{"id":"protocol-{}","name":"Test Protocol {}","peptideName":"Peptide{}"}}"#, i, i, i));
+            test_data.push_str(&format!(
+                r#"{{"id":"protocol-{}","name":"Test Protocol {}","peptideName":"Peptide{}"}}"#,
+                i, i, i
+            ));
         }
         test_data.push_str(r#"],"doseLogs":[],"literature":[]}"#);
 
@@ -244,14 +257,20 @@ mod tests {
         let compressed = encoder.finish().unwrap();
 
         // Verify compression actually reduced size
-        assert!(compressed.len() < test_data.len(), "Compressed size should be smaller than original");
+        assert!(
+            compressed.len() < test_data.len(),
+            "Compressed size should be smaller than original"
+        );
 
         // Decompress and verify
         let mut decoder = GzDecoder::new(&compressed[..]);
         let mut decompressed = String::new();
         decoder.read_to_string(&mut decompressed).unwrap();
 
-        assert_eq!(test_data, decompressed, "Decompressed data should match original");
+        assert_eq!(
+            test_data, decompressed,
+            "Decompressed data should match original"
+        );
     }
 
     #[test]
@@ -259,7 +278,10 @@ mod tests {
         // Create corrupted gzip data (valid header but invalid body)
         let corrupted = vec![0x1f, 0x8b, 0x08, 0x00, 0xff, 0xff, 0xff, 0xff];
 
-        assert!(is_gzip_data(&corrupted), "Should detect as gzip based on header");
+        assert!(
+            is_gzip_data(&corrupted),
+            "Should detect as gzip based on header"
+        );
 
         // Attempt to decompress - should fail
         let mut decoder = GzDecoder::new(&corrupted[..]);
@@ -287,7 +309,10 @@ mod tests {
         let mut decompressed = String::new();
         decoder.read_to_string(&mut decompressed).unwrap();
 
-        assert_eq!(test_data, decompressed, "Empty backup should compress/decompress correctly");
+        assert_eq!(
+            test_data, decompressed,
+            "Empty backup should compress/decompress correctly"
+        );
     }
 
     #[test]
@@ -325,6 +350,9 @@ mod tests {
         }
 
         // Best compression should generally be smallest (though not guaranteed for all data)
-        assert!(best.len() <= default.len(), "Best compression should be <= default");
+        assert!(
+            best.len() <= default.len(),
+            "Best compression should be <= default"
+        );
     }
 }

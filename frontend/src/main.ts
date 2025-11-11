@@ -12,7 +12,7 @@ app.config.errorHandler = (err, instance, info) => {
 };
 
 // Warn handler for development
-app.config.warnHandler = (msg, instance, trace) => {
+app.config.warnHandler = (msg, _instance, trace) => {
   console.warn('Vue warning:', msg);
   console.warn('Component trace:', trace);
 };

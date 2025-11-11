@@ -9,7 +9,7 @@ import {
   type DriveOAuthConfig,
   type DriveStatus,
 } from "../api/peptrack";
-import { showErrorToast, showSuccessToast } from "../utils/errorHandling";
+import { showErrorToast } from "../utils/errorHandling";
 
 const driveStatus = ref<DriveStatus | null>(null);
 const loading = ref(false);
