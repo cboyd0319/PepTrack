@@ -31,12 +31,33 @@
       {{ error }}
     </div>
 
+    <!-- Risk Matrix Button -->
+    <div v-if="selectedPapers.length > 0" class="risk-matrix-banner">
+      <div class="banner-content">
+        <span>{{ selectedPapers.length }} paper(s) selected</span>
+        <button @click="analyzeRiskMatrix" :disabled="analyzingRisks" class="analyze-btn">
+          {{ analyzingRisks ? '🔍 Analyzing...' : '🎯 Analyze Risk Matrix' }}
+        </button>
+        <button @click="clearSelection" class="clear-btn">Clear</button>
+      </div>
+    </div>
+
     <!-- Search Results -->
     <div v-if="searchResults.length > 0" class="search-results">
       <h3>Papers We Found</h3>
       <div v-for="sourceResult in searchResults" :key="sourceResult.source" class="source-section">
         <h4 class="source-header">From {{ getSourceName(sourceResult.source) }} ({{ sourceResult.results.length }} papers)</h4>
         <div v-for="(result, idx) in sourceResult.results" :key="idx" class="result-card">
+          <div class="paper-checkbox">
+            <input
+              type="checkbox"
+              :id="`paper-${sourceResult.source}-${idx}`"
+              :disabled="!isPaperSelected(result) && selectedPapers.length >= 5"
+              @change="togglePaperSelection(result)"
+              :checked="isPaperSelected(result)"
+            />
+            <label :for="`paper-${sourceResult.source}-${idx}`">Select for Risk Analysis</label>
+          </div>
           <h5>{{ result.title }}</h5>
           <p v-if="result.authors" class="authors">{{ result.authors }}</p>
           <p v-if="result.journal" class="journal">
@@ -91,8 +112,20 @@
       <div v-else class="literature-list">
         <div v-for="entry in filteredCachedLiterature" :key="entry.id" class="literature-card">
           <div class="literature-header">
-            <span class="source-badge">{{ getSourceName(entry.source) }}</span>
-            <span class="date">Saved {{ formatDate(entry.indexed_at) }}</span>
+            <div class="header-left">
+              <span class="source-badge">{{ getSourceName(entry.source) }}</span>
+              <span class="date">Saved {{ formatDate(entry.indexed_at) }}</span>
+            </div>
+            <div class="paper-checkbox-inline">
+              <input
+                type="checkbox"
+                :id="`saved-paper-${entry.id}`"
+                :disabled="!isSavedPaperSelected(entry) && selectedPapers.length >= 5"
+                @change="toggleSavedPaperSelection(entry)"
+                :checked="isSavedPaperSelected(entry)"
+              />
+              <label :for="`saved-paper-${entry.id}`">Select</label>
+            </div>
           </div>
           <h4>{{ entry.title }}</h4>
           <p v-if="entry.summary" class="summary">{{ entry.summary }}</p>
@@ -111,6 +144,56 @@
         </div>
       </div>
     </div>
+
+    <!-- Risk Matrix Modal -->
+    <div v-if="showRiskMatrix" class="modal-overlay" @click="closeRiskMatrix">
+      <div class="modal-content risk-matrix-modal" @click.stop>
+        <div class="modal-header">
+          <h3>🎯 Literature Risk Matrix Analysis</h3>
+          <button @click="closeRiskMatrix" class="close-btn">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="papers-analyzed">
+            <h4>📚 Papers Analyzed ({{ riskAnalysis.length }})</h4>
+            <ul>
+              <li v-for="(paper, idx) in riskAnalysis" :key="idx">{{ paper.title }}</li>
+            </ul>
+          </div>
+
+          <div class="risk-categories">
+            <div class="risk-category critical">
+              <h4>🔴 Critical Risks</h4>
+              <ul>
+                <li v-for="(risk, idx) in criticalRisks" :key="idx">{{ risk }}</li>
+                <li v-if="criticalRisks.length === 0" class="no-risks">None identified</li>
+              </ul>
+            </div>
+
+            <div class="risk-category warning">
+              <h4>🟡 Moderate Concerns</h4>
+              <ul>
+                <li v-for="(concern, idx) in moderateConcerns" :key="idx">{{ concern }}</li>
+                <li v-if="moderateConcerns.length === 0" class="no-risks">None identified</li>
+              </ul>
+            </div>
+
+            <div class="risk-category info">
+              <h4>🔵 Study Limitations</h4>
+              <ul>
+                <li v-for="(limitation, idx) in studyLimitations" :key="idx">{{ limitation }}</li>
+                <li v-if="studyLimitations.length === 0" class="no-risks">None identified</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="summary-section">
+            <h4>📊 Overall Risk Assessment</h4>
+            <p>{{ overallAssessment }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -122,6 +205,7 @@ import {
   searchCachedLiterature,
   searchLiterature,
   openExternalLink,
+  summarizeContent,
   type LiteratureEntry,
   type LiteratureSearchResult,
 } from '../api/peptrack';
@@ -139,6 +223,22 @@ const maxResults = 10;
 const cachedLiterature = ref<LiteratureEntry[]>([]);
 const cacheSearchQuery = ref('');
 const filteredCachedLiterature = ref<LiteratureEntry[]>([]);
+
+// Risk Matrix state
+interface SelectedPaper {
+  title: string;
+  content: string;
+  source: string;
+}
+
+const selectedPapers = ref<SelectedPaper[]>([]);
+const showRiskMatrix = ref(false);
+const analyzingRisks = ref(false);
+const riskAnalysis = ref<SelectedPaper[]>([]);
+const criticalRisks = ref<string[]>([]);
+const moderateConcerns = ref<string[]>([]);
+const studyLimitations = ref<string[]>([]);
+const overallAssessment = ref('');
 
 function emitSummaryPrefill(title: string, content: string) {
   if (!content || !content.trim()) {
@@ -268,6 +368,165 @@ function getSourceName(source: string): string {
     'crossref': 'Scientific Journal Index',
   };
   return names[source.toLowerCase()] || source;
+}
+
+// Risk Matrix Functions
+function togglePaperSelection(result: LiteratureSearchResult['results'][number]) {
+  const paper: SelectedPaper = {
+    title: result.title,
+    content: result.abstract_text || '',
+    source: 'search',
+  };
+
+  const index = selectedPapers.value.findIndex(p => p.title === paper.title);
+  if (index >= 0) {
+    selectedPapers.value.splice(index, 1);
+  } else if (selectedPapers.value.length < 5) {
+    selectedPapers.value.push(paper);
+  }
+}
+
+function toggleSavedPaperSelection(entry: LiteratureEntry) {
+  const paper: SelectedPaper = {
+    title: entry.title,
+    content: entry.summary || '',
+    source: 'saved',
+  };
+
+  const index = selectedPapers.value.findIndex(p => p.title === paper.title);
+  if (index >= 0) {
+    selectedPapers.value.splice(index, 1);
+  } else if (selectedPapers.value.length < 5) {
+    selectedPapers.value.push(paper);
+  }
+}
+
+function isPaperSelected(result: LiteratureSearchResult['results'][number]): boolean {
+  return selectedPapers.value.some(p => p.title === result.title);
+}
+
+function isSavedPaperSelected(entry: LiteratureEntry): boolean {
+  return selectedPapers.value.some(p => p.title === entry.title);
+}
+
+function clearSelection() {
+  selectedPapers.value = [];
+}
+
+async function analyzeRiskMatrix() {
+  if (selectedPapers.value.length === 0) return;
+
+  analyzingRisks.value = true;
+  riskAnalysis.value = [];
+  criticalRisks.value = [];
+  moderateConcerns.value = [];
+  studyLimitations.value = [];
+  overallAssessment.value = '';
+
+  try {
+    // Combine all paper content for analysis
+    const combinedContent = selectedPapers.value
+      .map((p, idx) => `\n\nPaper ${idx + 1}: ${p.title}\n${p.content}`)
+      .join('\n---');
+
+    const prompt = `Analyze the following ${selectedPapers.value.length} research papers for safety risks and study limitations. Focus on:
+1. CRITICAL RISKS: Cancer risks, serious adverse effects, toxicity concerns
+2. MODERATE CONCERNS: Side effects, drug interactions, contraindications
+3. STUDY LIMITATIONS: Lack of human studies, small sample sizes, short duration, animal-only studies, lack of long-term data
+
+Papers to analyze:
+${combinedContent}
+
+Provide your analysis in the following format:
+CRITICAL RISKS:
+- [list each critical risk]
+
+MODERATE CONCERNS:
+- [list each moderate concern]
+
+STUDY LIMITATIONS:
+- [list each study limitation]
+
+OVERALL ASSESSMENT:
+[2-3 sentence summary of the overall safety profile and research maturity]`;
+
+    const response = await summarizeContent({
+      title: 'Literature Risk Matrix Analysis',
+      content: prompt,
+      format: 'Markdown',
+    });
+
+    // Parse the AI response
+    parseRiskAnalysis(response.output);
+
+    // Store analyzed papers
+    riskAnalysis.value = [...selectedPapers.value];
+
+    // Show the modal
+    showRiskMatrix.value = true;
+    showSuccessToast('Analysis Complete', 'Risk matrix has been generated');
+  } catch (error: unknown) {
+    showErrorToast(error, { operation: 'analyze risk matrix' });
+  } finally {
+    analyzingRisks.value = false;
+  }
+}
+
+function parseRiskAnalysis(analysis: string) {
+  const sections = {
+    critical: /CRITICAL RISKS?:(.+?)(?=MODERATE|STUDY|OVERALL|$)/is,
+    moderate: /MODERATE CONCERNS?:(.+?)(?=CRITICAL|STUDY|OVERALL|$)/is,
+    limitations: /STUDY LIMITATIONS?:(.+?)(?=CRITICAL|MODERATE|OVERALL|$)/is,
+    assessment: /OVERALL ASSESSMENT:(.+?)$/is,
+  };
+
+  // Extract critical risks
+  const criticalMatch = analysis.match(sections.critical);
+  if (criticalMatch && criticalMatch[1]) {
+    criticalRisks.value = criticalMatch[1]
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.startsWith('-') || line.startsWith('•'))
+      .map(line => line.replace(/^[-•]\s*/, '').trim())
+      .filter(line => line.length > 0);
+  }
+
+  // Extract moderate concerns
+  const moderateMatch = analysis.match(sections.moderate);
+  if (moderateMatch && moderateMatch[1]) {
+    moderateConcerns.value = moderateMatch[1]
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.startsWith('-') || line.startsWith('•'))
+      .map(line => line.replace(/^[-•]\s*/, '').trim())
+      .filter(line => line.length > 0);
+  }
+
+  // Extract study limitations
+  const limitationsMatch = analysis.match(sections.limitations);
+  if (limitationsMatch && limitationsMatch[1]) {
+    studyLimitations.value = limitationsMatch[1]
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.startsWith('-') || line.startsWith('•'))
+      .map(line => line.replace(/^[-•]\s*/, '').trim())
+      .filter(line => line.length > 0);
+  }
+
+  // Extract overall assessment
+  const assessmentMatch = analysis.match(sections.assessment);
+  if (assessmentMatch && assessmentMatch[1]) {
+    overallAssessment.value = assessmentMatch[1].trim();
+  }
+
+  // Fallback if parsing failed
+  if (criticalRisks.value.length === 0 && moderateConcerns.value.length === 0 && studyLimitations.value.length === 0) {
+    overallAssessment.value = analysis;
+  }
+}
+
+function closeRiskMatrix() {
+  showRiskMatrix.value = false;
 }
 </script>
 
@@ -559,5 +818,311 @@ h2 {
 
 .view-link:hover {
   text-decoration: underline;
+}
+
+/* Risk Matrix Styles */
+.risk-matrix-banner {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.banner-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: white;
+  font-weight: 600;
+}
+
+.analyze-btn {
+  padding: 10px 20px;
+  background-color: #ffd700;
+  color: #333;
+  border: none;
+  border-radius: 6px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+}
+
+.analyze-btn:hover:not(:disabled) {
+  background-color: #ffed4e;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 215, 0, 0.4);
+}
+
+.analyze-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.clear-btn {
+  padding: 10px 16px;
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid white;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.clear-btn:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.paper-checkbox {
+  margin-bottom: 12px;
+  padding: 8px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.paper-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.paper-checkbox input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.paper-checkbox label {
+  font-size: 13px;
+  color: #666;
+  cursor: pointer;
+  user-select: none;
+}
+
+.paper-checkbox-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.paper-checkbox-inline input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.paper-checkbox-inline label {
+  font-size: 12px;
+  color: #666;
+  cursor: pointer;
+  user-select: none;
+}
+
+.header-left {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.literature-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.risk-matrix-modal {
+  background: white;
+  border-radius: 12px;
+  max-width: 900px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 2px solid #e0e0e0;
+  position: sticky;
+  top: 0;
+  background: white;
+  z-index: 10;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #2c3e50;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background-color: #f0f0f0;
+  color: #333;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.papers-analyzed {
+  margin-bottom: 24px;
+  padding: 16px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+}
+
+.papers-analyzed h4 {
+  margin-top: 0;
+  margin-bottom: 12px;
+  color: #2c3e50;
+}
+
+.papers-analyzed ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.papers-analyzed li {
+  margin-bottom: 8px;
+  color: #555;
+  line-height: 1.5;
+}
+
+.risk-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.risk-category {
+  padding: 16px;
+  border-radius: 8px;
+  border-left: 4px solid;
+}
+
+.risk-category.critical {
+  background-color: #fee;
+  border-left-color: #e74c3c;
+}
+
+.risk-category.warning {
+  background-color: #fffbf0;
+  border-left-color: #f39c12;
+}
+
+.risk-category.info {
+  background-color: #e3f2fd;
+  border-left-color: #3498db;
+}
+
+.risk-category h4 {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+.risk-category.critical h4 {
+  color: #c0392b;
+}
+
+.risk-category.warning h4 {
+  color: #d68910;
+}
+
+.risk-category.info h4 {
+  color: #2980b9;
+}
+
+.risk-category ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.risk-category li {
+  margin-bottom: 8px;
+  color: #333;
+  line-height: 1.6;
+}
+
+.no-risks {
+  color: #999 !important;
+  font-style: italic;
+  list-style: none;
+  margin-left: -20px;
+}
+
+.summary-section {
+  padding: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px;
+  color: white;
+}
+
+.summary-section h4 {
+  margin-top: 0;
+  margin-bottom: 12px;
+  color: white;
+}
+
+.summary-section p {
+  margin: 0;
+  line-height: 1.7;
+  font-size: 15px;
+}
+
+@media (max-width: 768px) {
+  .banner-content {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .analyze-btn,
+  .clear-btn {
+    width: 100%;
+  }
+
+  .risk-matrix-modal {
+    max-height: 95vh;
+  }
 }
 </style>
