@@ -212,19 +212,34 @@ function handleSubmit() {
     return;
   }
 
-  // Append style instruction to content
-  let contentWithStyle = formData.value.content;
+  // Build enhanced prompt with context and style instructions
+  let enhancedContent = `You are analyzing scientific research about PEPTIDES for therapeutic use.
+
+IMPORTANT INSTRUCTIONS:
+- Focus on the key findings, methodology, safety data, and clinical relevance
+- Pay special attention to dosages, administration routes, efficacy outcomes, and side effects
+- Identify any study limitations or areas needing more research
+- Highlight practical implications for therapeutic use
+
+Original Paper/Text:
+${formData.value.content}
+
+`;
+
+  // Add style-specific instructions
   if (summaryStyle.value !== 'balanced') {
     const styleInstructions = {
-      simple: '\n\nPlease explain this in simple terms that anyone can understand (ELI5 style).',
-      technical: '\n\nPlease provide a technical summary with all important details and terminology.',
-      brief: '\n\nPlease provide a very brief summary highlighting only the key points.',
+      simple: '\n\nSUMMARY STYLE: Explain this in simple, easy-to-understand terms that anyone can follow (ELI5 style). Avoid jargon.',
+      technical: '\n\nSUMMARY STYLE: Provide a technical summary with all important scientific details, terminology, and methodology.',
+      brief: '\n\nSUMMARY STYLE: Provide a very brief summary highlighting only the most critical key points.',
     };
-    contentWithStyle += styleInstructions[summaryStyle.value as keyof typeof styleInstructions] || '';
+    enhancedContent += styleInstructions[summaryStyle.value as keyof typeof styleInstructions] || '';
+  } else {
+    enhancedContent += '\n\nSUMMARY STYLE: Provide a balanced summary suitable for researchers and informed patients.';
   }
 
   // Temporarily update content for summarization
-  emit('update:content', contentWithStyle);
+  emit('update:content', enhancedContent);
   emit('summarize');
 
   // Restore original content after a short delay

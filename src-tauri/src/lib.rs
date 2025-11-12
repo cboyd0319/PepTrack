@@ -27,7 +27,7 @@ use commands::{
     suppliers::{
         create_inventory_item, create_supplier, delete_inventory_item, delete_supplier,
         get_inventory_item, get_supplier, list_inventory, list_inventory_by_protocol,
-        list_suppliers, update_inventory_item, update_supplier,
+        list_suppliers, scrape_supplier_website, update_inventory_item, update_supplier,
     },
 };
 use state::build_state;
@@ -119,6 +119,7 @@ pub fn run() {
             get_supplier,
             update_supplier,
             delete_supplier,
+            scrape_supplier_website,
             // Inventory commands
             create_inventory_item,
             list_inventory,

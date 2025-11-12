@@ -5,6 +5,7 @@ import AlertsDashboard from "./components/AlertsDashboard.vue";
 import ProtocolList from "./components/ProtocolList.vue";
 import ProtocolForm from "./components/ProtocolForm.vue";
 import ProtocolRecommender from "./components/ProtocolRecommender.vue";
+import ReconstitutionCalculator from "./components/ReconstitutionCalculator.vue";
 import Research from "./components/Research.vue";
 import WelcomeScreen from "./components/WelcomeScreen.vue";
 import DoseTracker from "./components/DoseTracker.vue";
@@ -286,6 +287,11 @@ onUnmounted(() => {
           @update:notes="form.notes = $event"
           @update:targetConcentration="form.targetConcentration = $event"
         />
+      </section>
+
+      <!-- Reconstitution Calculator -->
+      <section style="margin-top: 24px;">
+        <ReconstitutionCalculator />
       </section>
     </div>
 

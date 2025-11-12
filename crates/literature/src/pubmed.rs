@@ -131,37 +131,45 @@ impl PubMedFetcher {
         let mut results = Vec::new();
 
         for pmid in pmids {
-            if let Some(article) = summary_result.result.get(pmid) {
-                // Skip error entries
-                if article.title.is_none() {
-                    warn!("PMID {} has no title, skipping", pmid);
-                    continue;
+            if let Some(article_value) = summary_result.result.articles.get(pmid) {
+                // Try to deserialize the article data
+                match serde_json::from_value::<ArticleSummary>(article_value.clone()) {
+                    Ok(article) => {
+                        // Skip error entries
+                        if article.title.is_none() {
+                            warn!("PMID {} has no title, skipping", pmid);
+                            continue;
+                        }
+
+                        let title = article.title.clone().unwrap_or_default();
+                        let authors = article.authors.as_ref().map(|a| {
+                            a.iter()
+                                .map(|author| author.name.clone())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        });
+
+                        let doi = article.articleids.as_ref().and_then(|ids| {
+                            ids.iter()
+                                .find(|id| id.idtype == "doi")
+                                .map(|id| id.value.clone())
+                        });
+
+                        results.push(LiteratureResult {
+                            source: "pubmed".to_string(),
+                            title,
+                            url: Some(format!("https://pubmed.ncbi.nlm.nih.gov/{}/", pmid)),
+                            doi,
+                            authors,
+                            published_date: article.pubdate.clone(),
+                            journal: article.fulljournalname.clone(),
+                            abstract_text: None, // Summary API doesn't include abstracts
+                        });
+                    }
+                    Err(e) => {
+                        warn!("Failed to parse article {}: {}", pmid, e);
+                    }
                 }
-
-                let title = article.title.clone().unwrap_or_default();
-                let authors = article.authors.as_ref().map(|a| {
-                    a.iter()
-                        .map(|author| author.name.clone())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                });
-
-                let doi = article.articleids.as_ref().and_then(|ids| {
-                    ids.iter()
-                        .find(|id| id.idtype == "doi")
-                        .map(|id| id.value.clone())
-                });
-
-                results.push(LiteratureResult {
-                    source: "pubmed".to_string(),
-                    title,
-                    url: Some(format!("https://pubmed.ncbi.nlm.nih.gov/{}/", pmid)),
-                    doi,
-                    authors,
-                    published_date: article.pubdate.clone(),
-                    journal: article.fulljournalname.clone(),
-                    abstract_text: None, // Summary API doesn't include abstracts
-                });
             }
         }
 
@@ -201,7 +209,16 @@ struct ESearchData {
 
 #[derive(Debug, Deserialize)]
 struct ESummaryResult {
-    result: std::collections::HashMap<String, ArticleSummary>,
+    result: ESummaryData,
+}
+
+#[derive(Debug, Deserialize)]
+struct ESummaryData {
+    #[serde(default)]
+    #[allow(dead_code)]
+    uids: Vec<String>,
+    #[serde(flatten)]
+    articles: std::collections::HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]

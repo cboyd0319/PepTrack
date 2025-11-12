@@ -119,7 +119,7 @@ pub async fn get_backup_file_path() -> Result<String, String> {
 
     // Get user's downloads or documents folder
     let default_path = dirs::download_dir()
-        .or_else(|| dirs::document_dir())
+        .or_else(dirs::document_dir)
         .unwrap_or_else(|| PathBuf::from("."));
 
     let full_path = default_path.join(filename);

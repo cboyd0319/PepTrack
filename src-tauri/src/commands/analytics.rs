@@ -1,4 +1,4 @@
-use peptrack_core::{Alert, AlertSeverity, AlertType, PriceHistory, SummaryHistory};
+use peptrack_core::models::{Alert, AlertSeverity, AlertType, PriceHistory, SummaryHistory};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use tracing::{error, info};

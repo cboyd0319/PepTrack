@@ -3250,6 +3250,7 @@ dependencies = [
  "peptrack-literature",
  "peptrack-local-ai",
  "rand 0.8.5",
+ "regex",
  "reqwest 0.12.24",
  "serde",
  "serde_json",

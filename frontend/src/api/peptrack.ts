@@ -532,6 +532,21 @@ export async function comparePrices(peptideName: string) {
   return invoke<PriceComparison>("compare_prices", { peptideName });
 }
 
+// ========== Website Scraper ==========
+
+export interface PriceMatch {
+  pricePerMg: number;
+  context: string;
+  patternType: string;
+}
+
+export async function scrapeSupplierWebsite(url: string, peptideName?: string) {
+  return invoke<PriceMatch[]>("scrape_supplier_website", {
+    url,
+    peptideName,
+  });
+}
+
 // ========== Alerts System ==========
 
 export type AlertType =

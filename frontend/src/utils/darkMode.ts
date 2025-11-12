@@ -10,49 +10,71 @@ const isDark = ref(false);
 
 // Initialize theme from localStorage or default to auto
 function initializeTheme() {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored && (stored === 'light' || stored === 'dark' || stored === 'auto')) {
-    themeMode.value = stored as ThemeMode;
+  try {
+    const stored = localStorage?.getItem?.(STORAGE_KEY);
+    if (stored && (stored === 'light' || stored === 'dark' || stored === 'auto')) {
+      themeMode.value = stored as ThemeMode;
+    }
+    updateTheme();
+  } catch (e) {
+    // localStorage not available (e.g., in tests or SSR)
+    updateTheme();
   }
-  updateTheme();
 }
 
 // Update the actual theme based on mode
 function updateTheme() {
-  if (themeMode.value === 'auto') {
-    // Use system preference
-    isDark.value = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  } else {
-    isDark.value = themeMode.value === 'dark';
-  }
+  try {
+    if (themeMode.value === 'auto') {
+      // Use system preference
+      isDark.value = window?.matchMedia?.('(prefers-color-scheme: dark)')?.matches ?? false;
+    } else {
+      isDark.value = themeMode.value === 'dark';
+    }
 
-  // Apply theme to document
-  if (isDark.value) {
-    document.documentElement.classList.add('dark-mode');
-    document.documentElement.setAttribute('data-theme', 'dark');
-  } else {
-    document.documentElement.classList.remove('dark-mode');
-    document.documentElement.setAttribute('data-theme', 'light');
+    // Apply theme to document
+    if (typeof document !== 'undefined' && document.documentElement) {
+      if (isDark.value) {
+        document.documentElement.classList.add('dark-mode');
+        document.documentElement.setAttribute('data-theme', 'dark');
+      } else {
+        document.documentElement.classList.remove('dark-mode');
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    }
+  } catch (e) {
+    // DOM not available (e.g., in tests or SSR)
   }
 }
 
 // Set theme mode
 function setThemeMode(mode: ThemeMode) {
   themeMode.value = mode;
-  localStorage.setItem(STORAGE_KEY, mode);
+  try {
+    localStorage?.setItem?.(STORAGE_KEY, mode);
+  } catch (e) {
+    // localStorage not available
+  }
   updateTheme();
 }
 
 // Listen for system theme changes when in auto mode
 function listenToSystemTheme() {
-  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-  const handler = () => {
-    if (themeMode.value === 'auto') {
-      updateTheme();
+  try {
+    if (typeof window === 'undefined' || !window.matchMedia) {
+      return () => {}; // No-op cleanup in non-browser environments
     }
-  };
-  mediaQuery.addEventListener('change', handler);
-  return () => mediaQuery.removeEventListener('change', handler);
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = () => {
+      if (themeMode.value === 'auto') {
+        updateTheme();
+      }
+    };
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  } catch (e) {
+    return () => {}; // No-op cleanup on error
+  }
 }
 
 // Composable for using dark mode in components

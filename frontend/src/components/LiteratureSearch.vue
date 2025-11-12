@@ -1,7 +1,9 @@
 <template>
   <div class="literature-search">
-    <h2>📚 Research Papers</h2>
-    <p class="subtitle">Find scientific studies about peptides</p>
+    <div class="search-header">
+      <h2>📚 Research Papers</h2>
+      <p class="subtitle">Find scientific studies about peptides</p>
+    </div>
 
     <!-- Search Form -->
     <div class="search-box">
@@ -358,8 +360,14 @@ async function handleSearch() {
   searchResults.value = [];
 
   try {
+    // Add "+peptide" to the query if not already present to filter results better
+    let enhancedQuery = searchQuery.value;
+    if (!enhancedQuery.toLowerCase().includes('peptide')) {
+      enhancedQuery += ' +peptide';
+    }
+
     const results = await searchLiterature({
-      query: searchQuery.value,
+      query: enhancedQuery,
       maxResults: maxResults,
       sources,
     });
@@ -489,31 +497,48 @@ async function analyzeRiskMatrix() {
   overallAssessment.value = '';
 
   try {
-    // Combine all paper content for analysis
+    // Combine all paper content for analysis - use available content or title as fallback
     const combinedContent = selectedPapers.value
-      .map((p, idx) => `\n\nPaper ${idx + 1}: ${p.title}\n${p.content}`)
+      .map((p, idx) => {
+        const content = p.content && p.content.trim().length > 0
+          ? p.content
+          : '(No abstract available - analysis based on title only)';
+        return `\n\nPaper ${idx + 1}: ${p.title}\nContent: ${content}`;
+      })
       .join('\n---');
 
-    const prompt = `Analyze the following ${selectedPapers.value.length} research papers for safety risks and study limitations. Focus on:
-1. CRITICAL RISKS: Cancer risks, serious adverse effects, toxicity concerns
-2. MODERATE CONCERNS: Side effects, drug interactions, contraindications
-3. STUDY LIMITATIONS: Lack of human studies, small sample sizes, short duration, animal-only studies, lack of long-term data
+    const prompt = `YOU MUST START YOUR RESPONSE WITH EXACTLY: "CRITICAL RISKS:"
+
+DO NOT WRITE:
+- "I'm thinking about..."
+- "I wonder if..."
+- "**Evaluating...**"
+- Any preamble or explanation
+- Any chain-of-thought reasoning
+
+JUST WRITE THE FORMAT BELOW, NOTHING ELSE:
 
 Papers to analyze:
 ${combinedContent}
 
-Provide your analysis in the following format:
+NOW WRITE YOUR RESPONSE IN THIS EXACT FORMAT:
+
 CRITICAL RISKS:
-- [list each critical risk]
+- [risk 1]
+- [risk 2]
 
 MODERATE CONCERNS:
-- [list each moderate concern]
+- [concern 1]
+- [concern 2]
 
 STUDY LIMITATIONS:
-- [list each study limitation]
+- [limitation 1]
+- [limitation 2]
 
 OVERALL ASSESSMENT:
-[2-3 sentence summary of the overall safety profile and research maturity]`;
+[2-3 sentences about safety and research quality]
+
+REMEMBER: Your first word must be "CRITICAL" - nothing before it.`;
 
     const response = await summarizeContent({
       title: 'Literature Risk Matrix Analysis',
@@ -538,6 +563,15 @@ OVERALL ASSESSMENT:
 }
 
 function parseRiskAnalysis(analysis: string) {
+  // Strip out chain-of-thought thinking if present
+  // The AI might include preamble like "**Evaluating...**" or "I'm thinking about..."
+  // Find where the actual structured content starts
+  let cleanedAnalysis = analysis;
+  const structuredStart = analysis.indexOf('CRITICAL RISKS:');
+  if (structuredStart !== -1) {
+    cleanedAnalysis = analysis.substring(structuredStart);
+  }
+
   const sections = {
     critical: /CRITICAL RISKS?:(.+?)(?=MODERATE|STUDY|OVERALL|$)/is,
     moderate: /MODERATE CONCERNS?:(.+?)(?=CRITICAL|STUDY|OVERALL|$)/is,
@@ -546,7 +580,7 @@ function parseRiskAnalysis(analysis: string) {
   };
 
   // Extract critical risks
-  const criticalMatch = analysis.match(sections.critical);
+  const criticalMatch = cleanedAnalysis.match(sections.critical);
   if (criticalMatch && criticalMatch[1]) {
     criticalRisks.value = criticalMatch[1]
       .split('\n')
@@ -557,7 +591,7 @@ function parseRiskAnalysis(analysis: string) {
   }
 
   // Extract moderate concerns
-  const moderateMatch = analysis.match(sections.moderate);
+  const moderateMatch = cleanedAnalysis.match(sections.moderate);
   if (moderateMatch && moderateMatch[1]) {
     moderateConcerns.value = moderateMatch[1]
       .split('\n')
@@ -568,7 +602,7 @@ function parseRiskAnalysis(analysis: string) {
   }
 
   // Extract study limitations
-  const limitationsMatch = analysis.match(sections.limitations);
+  const limitationsMatch = cleanedAnalysis.match(sections.limitations);
   if (limitationsMatch && limitationsMatch[1]) {
     studyLimitations.value = limitationsMatch[1]
       .split('\n')
@@ -579,14 +613,14 @@ function parseRiskAnalysis(analysis: string) {
   }
 
   // Extract overall assessment
-  const assessmentMatch = analysis.match(sections.assessment);
+  const assessmentMatch = cleanedAnalysis.match(sections.assessment);
   if (assessmentMatch && assessmentMatch[1]) {
     overallAssessment.value = assessmentMatch[1].trim();
   }
 
   // Fallback if parsing failed
   if (criticalRisks.value.length === 0 && moderateConcerns.value.length === 0 && studyLimitations.value.length === 0) {
-    overallAssessment.value = analysis;
+    overallAssessment.value = cleanedAnalysis;
   }
 }
 
@@ -647,6 +681,24 @@ function downloadFile(content: string, filename: string, mimeType: string) {
   padding: 20px;
   max-width: 1200px;
   margin: 0 auto;
+  min-height: 500px;
+}
+
+.search-header {
+  margin-bottom: 24px;
+}
+
+.search-header h2 {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  color: #1a1a1a;
+}
+
+.search-header .subtitle {
+  margin: 0;
+  color: #666;
+  font-size: 15px;
 }
 
 h2 {

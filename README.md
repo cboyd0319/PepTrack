@@ -12,8 +12,9 @@ PepTrack is a macOS-first desktop application built with Rust, Tauri, and Vue 3,
 - **Protocol Management** - Create and manage peptide protocols with detailed tracking
 - **Dose Logging** - Complete dose tracking with calendar views and history
 - **Supplier & Inventory** - Track suppliers, manage vial inventory with expiry dates and batch tracking
-- **Literature Search** - Integrated search across PubMed, OpenAlex, and Crossref APIs
-- **Local AI Summaries** - Generate research summaries using local Codex or Claude CLI
+- **Literature Search** - Integrated search across PubMed, OpenAlex, and Crossref APIs with automatic peptide filtering
+- **Local AI Summaries** - Generate research summaries using local Codex CLI (GPT-5) or Claude CLI with peptide-specific context
+- **AI-Powered Risk Matrix Analysis** - Multi-paper safety analysis extracting critical risks, moderate concerns, and study limitations
 - **AI-Powered Protocol Recommender** - Get science-backed protocol recommendations from research papers
 - **Comprehensive Backup System**:
   - Manual and scheduled automatic backups (hourly/daily/weekly)

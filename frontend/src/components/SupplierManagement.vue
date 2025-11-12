@@ -133,6 +133,15 @@
             </div>
             <div class="supplier-actions">
               <button
+                v-if="supplier.website"
+                @click="openScrapeModal(supplier)"
+                class="scrape-btn"
+                :aria-label="`Scrape prices from ${supplier.name}`"
+                title="Scrape prices from website"
+              >
+                🔍 Scrape
+              </button>
+              <button
                 @click="openPriceTracking(supplier)"
                 class="price-btn"
                 :aria-label="`Track prices for ${supplier.name}`"
@@ -255,6 +264,11 @@
           </form>
         </div>
 
+        <!-- Price Chart -->
+        <div v-if="priceHistory.length > 0" class="price-chart-section">
+          <PriceChart :priceHistory="priceHistory" />
+        </div>
+
         <!-- Price History List -->
         <div class="price-history-section">
           <div class="history-header">
@@ -292,17 +306,97 @@
         </div>
       </div>
     </div>
+
+    <!-- Price Scraper Modal -->
+    <div v-if="showScrapeModal" class="modal-overlay" @click="closeScrapeModal">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h3>🔍 Scrape Prices: {{ scrapeSupplier?.name }}</h3>
+          <button @click="closeScrapeModal" class="close-btn">✕</button>
+        </div>
+
+        <div class="scrape-section">
+          <p class="info-text">
+            Automatically extract prices from the supplier's website. The scraper will look for price patterns
+            like "$X.XX/mg" or "Xmg for $YY".
+          </p>
+
+          <div class="scrape-form">
+            <div class="form-group">
+              <label for="scrape-url">Website URL</label>
+              <input
+                id="scrape-url"
+                v-model="scrapeUrl"
+                type="url"
+                placeholder="https://..."
+                readonly
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="scrape-peptide">Peptide Name (Optional)</label>
+              <input
+                id="scrape-peptide"
+                v-model="scrapePeptideName"
+                type="text"
+                placeholder="e.g., Tirzepatide"
+              />
+              <small class="help-text">Helps find prices near specific peptide mentions</small>
+            </div>
+
+            <button
+              @click="handleScrapeWebsite"
+              :disabled="isScrapingLoading"
+              class="primary-btn"
+            >
+              {{ isScrapingLoading ? '⏳ Scraping...' : '🔍 Scrape Website' }}
+            </button>
+          </div>
+
+          <!-- Scrape Results -->
+          <div v-if="scrapeResults.length > 0" class="scrape-results">
+            <h4>📊 Found {{ scrapeResults.length }} Price{{ scrapeResults.length > 1 ? 's' : '' }}</h4>
+
+            <div class="results-list">
+              <div
+                v-for="(match, idx) in scrapeResults"
+                :key="idx"
+                class="result-item"
+              >
+                <div class="result-header">
+                  <span class="result-price">${{ match.pricePerMg.toFixed(2) }}/mg</span>
+                  <span class="result-type-badge">{{ match.patternType }}</span>
+                </div>
+                <div class="result-context">{{ match.context }}</div>
+                <button
+                  @click="useScrapeResult(match)"
+                  class="use-result-btn"
+                >
+                  ✓ Use This Price
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div v-else-if="scrapeError" class="scrape-error">
+            ⚠️ {{ scrapeError }}
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import PriceChart from './PriceChart.vue';
 import type {
   Supplier,
   CreateSupplierPayload,
   UpdateSupplierPayload,
   PriceHistory,
-  AddPricePayload
+  AddPricePayload,
+  PriceMatch
 } from '../api/peptrack';
 import {
   listSuppliers,
@@ -310,7 +404,8 @@ import {
   updateSupplier,
   deleteSupplier,
   addPriceHistory,
-  listPriceHistory
+  listPriceHistory,
+  scrapeSupplierWebsite
 } from '../api/peptrack';
 import { showErrorToast, showSuccessToast } from '../utils/errorHandling';
 
@@ -327,6 +422,15 @@ const selectedSupplier = ref<Supplier | null>(null);
 const priceHistory = ref<PriceHistory[]>([]);
 const loadingPriceHistory = ref(false);
 const isSavingPrice = ref(false);
+
+// Price scraping state
+const showScrapeModal = ref(false);
+const scrapeSupplier = ref<Supplier | null>(null);
+const scrapeUrl = ref('');
+const scrapePeptideName = ref('');
+const scrapeResults = ref<PriceMatch[]>([]);
+const isScrapingLoading = ref(false);
+const scrapeError = ref<string | null>(null);
 
 const form = ref({
   name: '',
@@ -566,6 +670,75 @@ function getTrendIcon(index: number): string {
   if (trend === 'trend-up') return '📈';
   if (trend === 'trend-down') return '📉';
   return '➡️';
+}
+
+// Price scraper functions
+function openScrapeModal(supplier: Supplier) {
+  scrapeSupplier.value = supplier;
+  scrapeUrl.value = supplier.website || '';
+  scrapePeptideName.value = '';
+  scrapeResults.value = [];
+  scrapeError.value = null;
+  showScrapeModal.value = true;
+}
+
+function closeScrapeModal() {
+  showScrapeModal.value = false;
+  scrapeSupplier.value = null;
+  scrapeUrl.value = '';
+  scrapePeptideName.value = '';
+  scrapeResults.value = [];
+  scrapeError.value = null;
+}
+
+async function handleScrapeWebsite() {
+  if (!scrapeUrl.value) {
+    scrapeError.value = 'Please provide a website URL';
+    return;
+  }
+
+  isScrapingLoading.value = true;
+  scrapeError.value = null;
+  scrapeResults.value = [];
+
+  try {
+    const results = await scrapeSupplierWebsite(
+      scrapeUrl.value,
+      scrapePeptideName.value || undefined
+    );
+
+    scrapeResults.value = results;
+
+    if (results.length === 0) {
+      scrapeError.value = 'No prices found on this page. Try a different URL or peptide name.';
+    } else {
+      showSuccessToast('Success', `Found ${results.length} price${results.length > 1 ? 's' : ''}!`);
+    }
+  } catch (err) {
+    scrapeError.value = `Failed to scrape website: ${String(err)}`;
+    showErrorToast(new Error(scrapeError.value));
+  } finally {
+    isScrapingLoading.value = false;
+  }
+}
+
+async function useScrapeResult(match: PriceMatch) {
+  if (!scrapeSupplier.value) return;
+
+  // Fill the price form with the scraped data and close scrape modal
+  priceForm.value.costPerMg = match.pricePerMg;
+  priceForm.value.peptideName = scrapePeptideName.value || '';
+  priceForm.value.url = scrapeUrl.value;
+  priceForm.value.notes = `Auto-scraped: ${match.context.substring(0, 100)}...`;
+
+  closeScrapeModal();
+
+  // Open the price tracking modal with pre-filled data
+  selectedSupplier.value = scrapeSupplier.value;
+  showPriceModal.value = true;
+  await loadPriceHistory();
+
+  showSuccessToast('Success', 'Price data filled! Review and save to track.');
 }
 
 onMounted(() => {
@@ -964,6 +1137,12 @@ textarea:focus {
   gap: 16px;
 }
 
+.price-chart-section {
+  padding: 20px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #f8f9fa;
+}
+
 .price-history-section {
   padding: 20px;
 }
@@ -1132,5 +1311,143 @@ textarea:focus {
     align-items: flex-start;
     gap: 8px;
   }
+}
+
+/* Scraper Styles */
+.scrape-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: linear-gradient(135deg, #8e44ad, #9b59b6);
+  color: white;
+  font-weight: 600;
+}
+
+.scrape-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(142, 68, 173, 0.3);
+}
+
+.scrape-section {
+  padding: 20px;
+}
+
+.info-text {
+  margin: 0 0 20px 0;
+  padding: 12px;
+  background: #e8f5e9;
+  border-left: 4px solid #4caf50;
+  border-radius: 4px;
+  font-size: 14px;
+  color: #2e7d32;
+  line-height: 1.6;
+}
+
+.scrape-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.help-text {
+  font-size: 12px;
+  color: #666;
+  font-style: italic;
+  margin-top: 4px;
+}
+
+.scrape-results {
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 2px solid #e0e0e0;
+}
+
+.scrape-results h4 {
+  margin-top: 0;
+  margin-bottom: 16px;
+  color: #2c3e50;
+}
+
+.results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.result-item {
+  padding: 16px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.result-item:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-color: #8e44ad;
+}
+
+.result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.result-price {
+  font-size: 18px;
+  font-weight: 700;
+  color: #27ae60;
+}
+
+.result-type-badge {
+  padding: 4px 8px;
+  background: #e8f5e9;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2e7d32;
+  text-transform: uppercase;
+}
+
+.result-context {
+  margin-bottom: 12px;
+  padding: 8px;
+  background: #f8f9fa;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #555;
+  line-height: 1.5;
+}
+
+.use-result-btn {
+  width: 100%;
+  padding: 10px;
+  background: linear-gradient(135deg, #8e44ad, #9b59b6);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.use-result-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(142, 68, 173, 0.3);
+}
+
+.scrape-error {
+  padding: 16px;
+  background: #fee;
+  border: 1px solid #fcc;
+  border-radius: 6px;
+  color: #c33;
+  margin-top: 16px;
 }
 </style>

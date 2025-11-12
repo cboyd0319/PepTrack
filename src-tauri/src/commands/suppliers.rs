@@ -2,7 +2,8 @@ use peptrack_core::{InventoryItem, Supplier, VialStatus};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use time::OffsetDateTime;
-use tracing::{error, info};
+use tracing::{error, info, warn};
+use regex::Regex;
 
 use crate::state::AppState;
 
@@ -92,6 +93,105 @@ pub async fn delete_supplier(
         error!("Failed to delete supplier: {:#}", e);
         format!("Failed to delete supplier: {}", e)
     })
+}
+
+/// Scrape a website for peptide prices
+#[tauri::command]
+pub async fn scrape_supplier_website(
+    url: String,
+    peptide_name: Option<String>,
+) -> Result<Vec<PriceMatch>, String> {
+    info!("Scraping URL: {} for peptide: {:?}", url, peptide_name);
+
+    // Fetch the webpage
+    let response = reqwest::get(&url).await.map_err(|e| {
+        error!("Failed to fetch URL: {:#}", e);
+        format!("Failed to fetch webpage: {}", e)
+    })?;
+
+    let html = response.text().await.map_err(|e| {
+        error!("Failed to read response: {:#}", e);
+        format!("Failed to read webpage content: {}", e)
+    })?;
+
+    // Extract prices using multiple patterns
+    let mut matches = Vec::new();
+
+    // Pattern 1: $X.XX/mg or $X.XX per mg
+    let price_per_mg_re = Regex::new(r"\$?(\d+(?:\.\d{1,2})?)\s*(?:/|per)\s*mg").unwrap();
+    for cap in price_per_mg_re.captures_iter(&html) {
+        if let Some(price_str) = cap.get(1) {
+            if let Ok(price) = price_str.as_str().parse::<f32>() {
+                matches.push(PriceMatch {
+                    price_per_mg: price,
+                    context: extract_context(&html, cap.get(0).unwrap().start(), 100),
+                    pattern_type: "per_mg".to_string(),
+                });
+            }
+        }
+    }
+
+    // Pattern 2: XXmg for $YY or XXmg - $YY
+    let vial_price_re = Regex::new(r"(\d+(?:\.\d+)?)\s*mg\s*(?:for|-|:)?\s*\$(\d+(?:\.\d{1,2})?)").unwrap();
+    for cap in vial_price_re.captures_iter(&html) {
+        if let (Some(mg_str), Some(price_str)) = (cap.get(1), cap.get(2)) {
+            if let (Ok(mg), Ok(total_price)) = (mg_str.as_str().parse::<f32>(), price_str.as_str().parse::<f32>()) {
+                if mg > 0.0 {
+                    let price_per_mg = total_price / mg;
+                    matches.push(PriceMatch {
+                        price_per_mg,
+                        context: extract_context(&html, cap.get(0).unwrap().start(), 100),
+                        pattern_type: "vial_price".to_string(),
+                    });
+                }
+            }
+        }
+    }
+
+    // Pattern 3: Generic price mentions near peptide names
+    if let Some(ref peptide) = peptide_name {
+        let peptide_pattern = format!(r"(?i){}\s*(?:\w+\s*){{0,10}}\$(\d+(?:\.\d{{1,2}})?)", regex::escape(peptide));
+        if let Ok(peptide_re) = Regex::new(&peptide_pattern) {
+            for cap in peptide_re.captures_iter(&html) {
+                if let Some(price_str) = cap.get(1) {
+                    if let Ok(price) = price_str.as_str().parse::<f32>() {
+                        matches.push(PriceMatch {
+                            price_per_mg: price,
+                            context: extract_context(&html, cap.get(0).unwrap().start(), 150),
+                            pattern_type: "peptide_mention".to_string(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Remove duplicates and sort by price
+    matches.sort_by(|a, b| a.price_per_mg.partial_cmp(&b.price_per_mg).unwrap());
+    matches.dedup_by(|a, b| (a.price_per_mg - b.price_per_mg).abs() < 0.01);
+
+    if matches.is_empty() {
+        warn!("No prices found on URL: {}", url);
+    } else {
+        info!("Found {} price matches", matches.len());
+    }
+
+    Ok(matches)
+}
+
+/// Extract text context around a position in HTML (strips tags)
+fn extract_context(html: &str, position: usize, radius: usize) -> String {
+    let start = position.saturating_sub(radius);
+    let end = (position + radius).min(html.len());
+    let snippet = &html[start..end];
+
+    // Simple HTML tag removal
+    let tag_re = Regex::new(r"<[^>]+>").unwrap();
+    let clean = tag_re.replace_all(snippet, " ");
+
+    // Collapse whitespace
+    let ws_re = Regex::new(r"\s+").unwrap();
+    ws_re.replace_all(&clean, " ").trim().to_string()
 }
 
 // ========== Inventory Commands ==========
@@ -213,6 +313,14 @@ pub async fn delete_inventory_item(
 }
 
 // ========== Payload Structs ==========
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PriceMatch {
+    pub price_per_mg: f32,
+    pub context: String,
+    pub pattern_type: String,
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

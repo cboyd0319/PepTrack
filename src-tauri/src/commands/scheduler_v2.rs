@@ -267,33 +267,6 @@ impl SchedulerState {
         *self.task_handle.lock().await = Some(handle);
         info!("Background scheduler task spawned");
     }
-
-    pub async fn trigger_backup_on_close(&self, app_state: &AppState) -> Result<()> {
-        let schedule = self.schedule.read().await.clone();
-
-        if !schedule.backup_on_close {
-            return Ok(());
-        }
-
-        info!("Triggering backup on app close");
-
-        // Try to acquire lock
-        let _guard = self
-            .backup_lock
-            .try_lock()
-            .map_err(|_| anyhow::anyhow!("Backup already in progress"))?;
-
-        perform_scheduled_backup_with_retry(
-            app_state,
-            &self.schedule,
-            &self.history,
-            &self.progress,
-            self,
-        )
-        .await?;
-
-        Ok(())
-    }
 }
 
 /// Gets the current backup schedule
@@ -650,7 +623,7 @@ async fn perform_local_backup(state: &AppState, compress: bool) -> Result<(Strin
         .unwrap_or_else(|_| "backup".to_string());
 
     let default_path = dirs::download_dir()
-        .or_else(|| dirs::document_dir())
+        .or_else(dirs::document_dir)
         .context("Could not determine download directory")?;
 
     let json = serde_json::to_string_pretty(&backup)?;
@@ -781,7 +754,7 @@ fn verify_backup(path: &std::path::Path, compressed: bool) -> Result<()> {
 
 async fn perform_cleanup(settings: &CleanupSettings) -> Result<()> {
     let download_dir = dirs::download_dir()
-        .or_else(|| dirs::document_dir())
+        .or_else(dirs::document_dir)
         .context("Could not determine download directory")?;
 
     // Find all peptrack backup files

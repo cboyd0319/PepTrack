@@ -30,21 +30,29 @@ const defaultWidgets: WidgetConfig[] = [
 
 // Load widgets from localStorage or use defaults
 function loadWidgets(): WidgetConfig[] {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored) {
-    try {
-      return JSON.parse(stored);
-    } catch (e) {
-      console.error('Failed to parse widget config:', e);
-      return [...defaultWidgets];
+  try {
+    const stored = localStorage?.getItem?.(STORAGE_KEY);
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        console.error('Failed to parse widget config:', e);
+        return [...defaultWidgets];
+      }
     }
+  } catch (e) {
+    // localStorage not available (e.g., in tests or SSR)
   }
   return [...defaultWidgets];
 }
 
 // Save widgets to localStorage
 function saveWidgets(widgets: WidgetConfig[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(widgets));
+  try {
+    localStorage?.setItem?.(STORAGE_KEY, JSON.stringify(widgets));
+  } catch (e) {
+    // localStorage not available
+  }
 }
 
 // Reactive widget configuration

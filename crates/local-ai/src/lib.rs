@@ -276,6 +276,13 @@ impl ClaudeCli {
 }
 
 fn build_summary_prompt(title: &str, content: &str, format: SummaryFormat) -> String {
+    // If content already starts with strong instructions (like "CRITICAL INSTRUCTION:"),
+    // it's a complete prompt - don't wrap it
+    if content.trim().starts_with("CRITICAL INSTRUCTION:") || content.contains("OUTPUT FORMAT") {
+        return content.to_string();
+    }
+
+    // Otherwise, wrap with standard summarization instructions
     let instructions = match format {
         SummaryFormat::Markdown => "Generate a concise Markdown summary with safety flags, core findings, dosing insights, and citations.",
         SummaryFormat::Json => "Return a strict JSON object with keys: highlights[], dosing_notes[], safety_flags[].",
@@ -300,6 +307,18 @@ struct ClaudeMessage {
 
 fn parse_claude_json(buffer: &[u8]) -> Option<String> {
     let text = String::from_utf8_lossy(buffer);
+
+    // Try to parse as a single JSON object first (new format)
+    if let Ok(parsed) = serde_json::from_str::<ClaudeJsonLine>(&text) {
+        if let Some(message) = parsed.message.and_then(|m| m.content) {
+            return Some(message);
+        }
+        if let Some(text) = parsed.text {
+            return Some(text);
+        }
+    }
+
+    // Fall back to line-by-line parsing (streaming format)
     let mut last = None;
     for line in text.lines() {
         if line.trim().is_empty() {
@@ -322,36 +341,19 @@ fn parse_claude_json(buffer: &[u8]) -> Option<String> {
 fn parse_codex_json(buffer: &[u8]) -> Option<String> {
     let text = String::from_utf8_lossy(buffer);
     let mut last_message = None;
-    let fallback_regex = Regex::new(r#""text"\s*:\s*"([^"]+)""#).ok();
 
     for line in text.lines() {
         if line.trim().is_empty() {
             continue;
         }
         if let Ok(value) = serde_json::from_str::<Value>(line) {
+            // Codex CLI outputs {"type":"item.completed","item":{"text":"..."}}
             if let Some(text) = value
-                .pointer("/data/text")
+                .pointer("/item/text")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
             {
                 last_message = Some(text);
-                continue;
-            }
-
-            if let Some(text) = value
-                .pointer("/data/message/content")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
-            {
-                last_message = Some(text);
-            }
-        }
-    }
-
-    if last_message.is_none() {
-        if let Some(regex) = fallback_regex {
-            if let Some(caps) = regex.captures(&text) {
-                last_message = Some(caps[1].to_string());
             }
         }
     }
