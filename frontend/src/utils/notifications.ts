@@ -130,9 +130,9 @@ export async function notifyInfo(title: string, body: string, toastOnly = false)
  */
 export const NotificationPresets = {
   /** Dose reminder notification */
-  doseReminder: (peptideName: string, time: string) => ({
+  doseReminder: (peptideName: string, time: string, amountMg?: number) => ({
     title: '💉 Dose Reminder',
-    body: `Time for your ${peptideName} dose (scheduled for ${time})`,
+    body: `Time for your ${peptideName} dose${amountMg ? ` (${amountMg}mg)` : ''} - scheduled for ${time}`,
     toastType: 'info' as const,
   }),
 

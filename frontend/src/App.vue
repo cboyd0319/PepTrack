@@ -31,6 +31,8 @@ const isOnline = ref(navigator.onLine);
 import type { PeptideProtocol, CreateProtocolPayload } from "./api/peptrack";
 import { listProtocols, saveProtocol, exportBackupData } from "./api/peptrack";
 import { initializeTheme } from "./utils/darkMode";
+import { initializeNotifications } from "./utils/notifications";
+import { useReminderService } from "./composables/useReminderService";
 
 const protocols = ref<PeptideProtocol[]>([]);
 const loadingProtocols = ref(false);
@@ -130,11 +132,28 @@ function updateOnlineStatus() {
   isOnline.value = navigator.onLine;
 }
 
-onMounted(() => {
+// Initialize reminder service
+const reminderService = useReminderService({
+  checkIntervalMinutes: 5, // Check every 5 minutes
+  enabled: true,
+});
+
+onMounted(async () => {
   refreshProtocols();
 
   // Initialize dark mode
   initializeTheme();
+
+  // Initialize notifications and start reminder service
+  try {
+    const notificationsEnabled = await initializeNotifications();
+    console.log(`Notifications ${notificationsEnabled ? 'enabled' : 'disabled'}`);
+
+    // Start reminder service
+    reminderService.start();
+  } catch (error) {
+    console.error('Failed to initialize notifications:', error);
+  }
 
   // Listen for connectivity changes
   window.addEventListener('online', updateOnlineStatus);
@@ -144,6 +163,9 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('online', updateOnlineStatus);
   window.removeEventListener('offline', updateOnlineStatus);
+
+  // Stop reminder service
+  reminderService.stop();
 });
 </script>
 
