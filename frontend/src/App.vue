@@ -14,6 +14,8 @@ import InventoryManagement from "./components/InventoryManagement.vue";
 import Toast from "./components/Toast.vue";
 import GlobalSearch from "./components/GlobalSearch.vue";
 import QuickActionsFAB from "./components/QuickActionsFAB.vue";
+import KeyboardShortcutsHelp from "./components/KeyboardShortcutsHelp.vue";
+import OnboardingFlow from "./components/OnboardingFlow.vue";
 
 // Navigation
 type View = "dashboard" | "doses" | "protocols" | "ai-assistant" | "research" | "operations" | "settings" | "alerts";
@@ -149,6 +151,8 @@ onUnmounted(() => {
   <WelcomeScreen ref="welcomeScreen" />
   <GlobalSearch ref="globalSearch" @navigate="handleSearchNavigate" />
   <QuickActionsFAB @navigate="handleSearchNavigate" @openSearch="handleOpenSearch" />
+  <KeyboardShortcutsHelp />
+  <OnboardingFlow />
 
   <main class="page">
     <header>
