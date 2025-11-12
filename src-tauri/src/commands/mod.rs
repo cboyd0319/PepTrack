@@ -1,4 +1,5 @@
 pub mod ai;
+pub mod analytics;
 pub mod backup;
 pub mod doses;
 pub mod drive;

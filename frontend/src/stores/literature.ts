@@ -5,24 +5,25 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { LiteratureEntry, LiteratureProvider, SummaryFormat } from '../api/peptrack'
+import type { LiteratureEntry, LiteratureSearchResult, SummaryFormat, SearchLiteraturePayload } from '../api/peptrack'
 import {
   searchLiterature,
-  listCachedLiterature,
+  searchCachedLiterature,
+  listLiterature,
   summarizeContent
 } from '../api/peptrack'
 import { showErrorToast, showSuccessToast } from '../utils/errorHandling'
 
 export const useLiteratureStore = defineStore('literature', () => {
   // State
-  const searchResults = ref<LiteratureEntry[]>([])
+  const searchResults = ref<LiteratureSearchResult[]>([])
   const cachedLiterature = ref<LiteratureEntry[]>([])
   const searchLoading = ref(false)
   const summarizing = ref(false)
 
   // Current search params
   const lastSearchQuery = ref<string>('')
-  const lastSearchProvider = ref<LiteratureProvider>('PubMed')
+  const lastSearchSources = ref<string[]>(['PubMed'])
 
   // AI Summary state
   const currentSummary = ref<string | null>(null)
@@ -35,27 +36,33 @@ export const useLiteratureStore = defineStore('literature', () => {
 
   const recentSearches = computed(() =>
     [...cachedLiterature.value]
-      .sort((a, b) => new Date(b.indexedAt).getTime() - new Date(a.indexedAt).getTime())
+      .sort((a, b) => new Date(b.indexed_at).getTime() - new Date(a.indexed_at).getTime())
       .slice(0, 10)
   )
 
   // Actions
-  async function search(query: string, provider: LiteratureProvider = 'PubMed') {
+  async function search(query: string, sources: string[] = ['PubMed'], maxResults?: number) {
     if (!query.trim()) {
       return []
     }
 
     searchLoading.value = true
     lastSearchQuery.value = query
-    lastSearchProvider.value = provider
+    lastSearchSources.value = sources
 
     try {
-      const results = await searchLiterature(query, provider)
+      const payload: SearchLiteraturePayload = {
+        query,
+        sources,
+        maxResults
+      }
+      const results = await searchLiterature(payload)
       searchResults.value = results
-      showSuccessToast(`Found ${results.length} results from ${provider}`)
+      const totalResults = results.reduce((sum, r) => sum + r.results.length, 0)
+      showSuccessToast('Search Complete', `Found ${totalResults} results from ${sources.join(', ')}`)
       return results
     } catch (error) {
-      showErrorToast(error, { operation: `search ${provider}` })
+      showErrorToast(error, { operation: `search ${sources.join(', ')}` })
       searchResults.value = []
       throw error
     } finally {
@@ -63,9 +70,13 @@ export const useLiteratureStore = defineStore('literature', () => {
     }
   }
 
-  async function fetchCachedLiterature() {
+  async function fetchCachedLiterature(query?: string) {
     try {
-      cachedLiterature.value = await listCachedLiterature()
+      if (query) {
+        cachedLiterature.value = await searchCachedLiterature(query)
+      } else {
+        cachedLiterature.value = await listLiterature()
+      }
       return cachedLiterature.value
     } catch (error) {
       showErrorToast(error, { operation: 'load cached literature' })
@@ -88,7 +99,7 @@ export const useLiteratureStore = defineStore('literature', () => {
       currentSummary.value = result.output
       summaryProvider.value = result.provider
 
-      showSuccessToast(`Summary generated using ${result.provider}`)
+      showSuccessToast('Summary Generated', `Summary generated using ${result.provider}`)
       return result
     } catch (error) {
       showErrorToast(error, { operation: 'generate AI summary' })
@@ -121,7 +132,7 @@ export const useLiteratureStore = defineStore('literature', () => {
     searchLoading,
     summarizing,
     lastSearchQuery,
-    lastSearchProvider,
+    lastSearchSources,
     currentSummary,
     summaryProvider,
 

@@ -30,14 +30,14 @@ export const useSupplierStore = defineStore('suppliers', () => {
   const inventoryCount = computed(() => inventory.value.length)
 
   const activeInventory = computed(() =>
-    inventory.value.filter(item => item.status === 'Active' || item.status === 'InUse')
+    inventory.value.filter(item => item.vial_status === 'sealed' || item.vial_status === 'opened')
   )
 
   const expiredInventory = computed(() => {
     const now = new Date()
     return inventory.value.filter(item => {
-      if (!item.expiryDate) return false
-      return new Date(item.expiryDate) < now
+      if (!item.expiry_date) return false
+      return new Date(item.expiry_date) < now
     })
   })
 
@@ -45,8 +45,8 @@ export const useSupplierStore = defineStore('suppliers', () => {
     const now = new Date()
     const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
     return inventory.value.filter(item => {
-      if (!item.expiryDate) return false
-      const expiry = new Date(item.expiryDate)
+      if (!item.expiry_date) return false
+      const expiry = new Date(item.expiry_date)
       return expiry > now && expiry <= thirtyDaysFromNow
     })
   })
@@ -70,7 +70,7 @@ export const useSupplierStore = defineStore('suppliers', () => {
     try {
       const newSupplier = await createSupplier(payload)
       suppliers.value.push(newSupplier)
-      showSuccessToast('Supplier added successfully')
+      showSuccessToast('Supplier Added', 'Supplier added successfully')
       return newSupplier
     } catch (error) {
       showErrorToast(error, { operation: 'create supplier' })
@@ -88,7 +88,7 @@ export const useSupplierStore = defineStore('suppliers', () => {
       if (index !== -1) {
         suppliers.value[index] = updated
       }
-      showSuccessToast('Supplier updated successfully')
+      showSuccessToast('Supplier Updated', 'Supplier updated successfully')
       return updated
     } catch (error) {
       showErrorToast(error, { operation: 'update supplier' })
@@ -103,7 +103,7 @@ export const useSupplierStore = defineStore('suppliers', () => {
     try {
       await deleteSupplier(id)
       suppliers.value = suppliers.value.filter(s => s.id !== id)
-      showSuccessToast('Supplier deleted successfully')
+      showSuccessToast('Supplier Deleted', 'Supplier deleted successfully')
     } catch (error) {
       showErrorToast(error, { operation: 'delete supplier' })
       throw error
@@ -131,7 +131,7 @@ export const useSupplierStore = defineStore('suppliers', () => {
     try {
       const newItem = await createInventoryItem(payload)
       inventory.value.push(newItem)
-      showSuccessToast('Inventory item added successfully')
+      showSuccessToast('Inventory Added', 'Inventory item added successfully')
       return newItem
     } catch (error) {
       showErrorToast(error, { operation: 'create inventory item' })
@@ -149,7 +149,7 @@ export const useSupplierStore = defineStore('suppliers', () => {
       if (index !== -1) {
         inventory.value[index] = updated
       }
-      showSuccessToast('Inventory updated successfully')
+      showSuccessToast('Inventory Updated', 'Inventory updated successfully')
       return updated
     } catch (error) {
       showErrorToast(error, { operation: 'update inventory' })
@@ -164,7 +164,7 @@ export const useSupplierStore = defineStore('suppliers', () => {
     try {
       await deleteInventoryItem(id)
       inventory.value = inventory.value.filter(i => i.id !== id)
-      showSuccessToast('Inventory item deleted successfully')
+      showSuccessToast('Inventory Deleted', 'Inventory item deleted successfully')
     } catch (error) {
       showErrorToast(error, { operation: 'delete inventory item' })
       throw error

@@ -8,7 +8,10 @@ use time::OffsetDateTime;
 use tracing::info;
 
 use crate::encryption::{EnvelopeEncryption, KeyProvider};
-use crate::models::{DoseLog, InventoryItem, LiteratureEntry, PeptideProtocol, Supplier};
+use crate::models::{
+    Alert, DoseLog, InventoryItem, LiteratureEntry, PeptideProtocol,
+    PriceHistory, Supplier, SummaryHistory,
+};
 
 const DEFAULT_DB_NAME: &str = "peptrack.sqlite";
 
@@ -93,6 +96,40 @@ impl StorageManager {
                 payload BLOB NOT NULL,
                 updated_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS price_history (
+                id TEXT PRIMARY KEY,
+                supplier_id TEXT NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+                peptide_name TEXT NOT NULL,
+                payload BLOB NOT NULL,
+                recorded_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_price_history_supplier_peptide
+                ON price_history(supplier_id, peptide_name, recorded_at DESC);
+
+            CREATE TABLE IF NOT EXISTS alerts (
+                id TEXT PRIMARY KEY,
+                alert_type TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                payload BLOB NOT NULL,
+                is_read INTEGER NOT NULL DEFAULT 0,
+                is_dismissed INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_alerts_not_dismissed
+                ON alerts(is_dismissed, created_at DESC) WHERE is_dismissed = 0;
+
+            CREATE TABLE IF NOT EXISTS summary_history (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                payload BLOB NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_summary_history_created
+                ON summary_history(created_at DESC);
             "#,
         )
         .context("Failed to initialize database schema")?;
@@ -449,6 +486,234 @@ impl StorageManager {
         let item: InventoryItem =
             serde_json::from_slice(&decrypted).context("Failed to deserialize inventory item")?;
         Ok(item)
+    }
+
+    // Price History CRUD operations
+
+    pub fn add_price_history(&self, entry: &PriceHistory) -> Result<()> {
+        let conn = self.open_connection()?;
+        let payload = serde_json::to_vec(entry).context("Failed to serialize price history")?;
+        let encrypted = self.encryption.seal(&payload)?;
+
+        conn.execute(
+            r#"
+            INSERT INTO price_history (id, supplier_id, peptide_name, payload, recorded_at)
+            VALUES (?1, ?2, ?3, ?4, ?5)
+            "#,
+            params![
+                entry.id,
+                entry.supplier_id,
+                entry.peptide_name,
+                encrypted,
+                entry.recorded_at.to_string()
+            ],
+        )
+        .context("Failed to add price history")?;
+
+        Ok(())
+    }
+
+    pub fn list_price_history_for_supplier(
+        &self,
+        supplier_id: &str,
+        peptide_name: Option<&str>,
+    ) -> Result<Vec<PriceHistory>> {
+        let conn = self.open_connection()?;
+
+        let (query, params): (String, Vec<&str>) = if let Some(peptide) = peptide_name {
+            (
+                "SELECT payload FROM price_history WHERE supplier_id = ?1 AND peptide_name = ?2 ORDER BY recorded_at DESC".into(),
+                vec![supplier_id, peptide],
+            )
+        } else {
+            (
+                "SELECT payload FROM price_history WHERE supplier_id = ?1 ORDER BY recorded_at DESC".into(),
+                vec![supplier_id],
+            )
+        };
+
+        let mut stmt = conn.prepare(&query)?;
+        let mut rows = stmt
+            .query(rusqlite::params_from_iter(params.iter()))
+            .context("Unable to query price history")?;
+
+        let mut entries = Vec::new();
+        while let Some(row) = rows.next()? {
+            let blob: Vec<u8> = row.get(0)?;
+            entries.push(self.decode_price_history(&blob)?);
+        }
+        Ok(entries)
+    }
+
+    pub fn get_latest_price(
+        &self,
+        supplier_id: &str,
+        peptide_name: &str,
+    ) -> Result<Option<PriceHistory>> {
+        let conn = self.open_connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT payload FROM price_history WHERE supplier_id = ?1 AND peptide_name = ?2 ORDER BY recorded_at DESC LIMIT 1"
+        )?;
+        let mut rows = stmt.query(params![supplier_id, peptide_name])?;
+
+        if let Some(row) = rows.next()? {
+            let blob: Vec<u8> = row.get(0)?;
+            Ok(Some(self.decode_price_history(&blob)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    // Alert CRUD operations
+
+    pub fn create_alert(&self, alert: &Alert) -> Result<()> {
+        let conn = self.open_connection()?;
+        let payload = serde_json::to_vec(alert).context("Failed to serialize alert")?;
+        let encrypted = self.encryption.seal(&payload)?;
+
+        conn.execute(
+            r#"
+            INSERT INTO alerts (id, alert_type, severity, payload, is_read, is_dismissed, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "#,
+            params![
+                alert.id,
+                serde_json::to_string(&alert.alert_type)?,
+                serde_json::to_string(&alert.severity)?,
+                encrypted,
+                alert.is_read as i32,
+                alert.is_dismissed as i32,
+                alert.created_at.to_string()
+            ],
+        )
+        .context("Failed to create alert")?;
+
+        Ok(())
+    }
+
+    pub fn list_alerts(&self, include_dismissed: bool) -> Result<Vec<Alert>> {
+        let conn = self.open_connection()?;
+
+        let query = if include_dismissed {
+            "SELECT payload FROM alerts ORDER BY created_at DESC"
+        } else {
+            "SELECT payload FROM alerts WHERE is_dismissed = 0 ORDER BY created_at DESC"
+        };
+
+        let mut stmt = conn.prepare(query)?;
+        let mut rows = stmt
+            .query([])
+            .context("Unable to query alerts")?;
+
+        let mut alerts = Vec::new();
+        while let Some(row) = rows.next()? {
+            let blob: Vec<u8> = row.get(0)?;
+            alerts.push(self.decode_alert(&blob)?);
+        }
+        Ok(alerts)
+    }
+
+    pub fn mark_alert_read(&self, alert_id: &str) -> Result<()> {
+        let conn = self.open_connection()?;
+        conn.execute(
+            "UPDATE alerts SET is_read = 1 WHERE id = ?1",
+            params![alert_id],
+        )
+        .context("Failed to mark alert as read")?;
+        Ok(())
+    }
+
+    pub fn dismiss_alert(&self, alert_id: &str) -> Result<()> {
+        let conn = self.open_connection()?;
+        conn.execute(
+            "UPDATE alerts SET is_dismissed = 1 WHERE id = ?1",
+            params![alert_id],
+        )
+        .context("Failed to dismiss alert")?;
+        Ok(())
+    }
+
+    pub fn clear_all_alerts(&self) -> Result<()> {
+        let conn = self.open_connection()?;
+        conn.execute("DELETE FROM alerts", [])
+            .context("Failed to clear alerts")?;
+        Ok(())
+    }
+
+    // Summary History CRUD operations
+
+    pub fn save_summary(&self, summary: &SummaryHistory) -> Result<()> {
+        let conn = self.open_connection()?;
+        let payload = serde_json::to_vec(summary).context("Failed to serialize summary")?;
+        let encrypted = self.encryption.seal(&payload)?;
+
+        conn.execute(
+            r#"
+            INSERT INTO summary_history (id, title, payload, created_at)
+            VALUES (?1, ?2, ?3, ?4)
+            "#,
+            params![
+                summary.id,
+                summary.title,
+                encrypted,
+                summary.created_at.to_string()
+            ],
+        )
+        .context("Failed to save summary")?;
+
+        Ok(())
+    }
+
+    pub fn list_summary_history(&self, limit: Option<usize>) -> Result<Vec<SummaryHistory>> {
+        let conn = self.open_connection()?;
+
+        let query = if let Some(lim) = limit {
+            format!("SELECT payload FROM summary_history ORDER BY created_at DESC LIMIT {}", lim)
+        } else {
+            "SELECT payload FROM summary_history ORDER BY created_at DESC".into()
+        };
+
+        let mut stmt = conn.prepare(&query)?;
+        let mut rows = stmt
+            .query([])
+            .context("Unable to query summary history")?;
+
+        let mut summaries = Vec::new();
+        while let Some(row) = rows.next()? {
+            let blob: Vec<u8> = row.get(0)?;
+            summaries.push(self.decode_summary_history(&blob)?);
+        }
+        Ok(summaries)
+    }
+
+    pub fn delete_summary(&self, summary_id: &str) -> Result<()> {
+        let conn = self.open_connection()?;
+        conn.execute("DELETE FROM summary_history WHERE id = ?1", params![summary_id])
+            .context("Failed to delete summary")?;
+        Ok(())
+    }
+
+    // Decoder helper functions
+
+    fn decode_price_history(&self, blob: &[u8]) -> Result<PriceHistory> {
+        let decrypted = self.encryption.open(blob)?;
+        let entry: PriceHistory =
+            serde_json::from_slice(&decrypted).context("Failed to deserialize price history")?;
+        Ok(entry)
+    }
+
+    fn decode_alert(&self, blob: &[u8]) -> Result<Alert> {
+        let decrypted = self.encryption.open(blob)?;
+        let alert: Alert =
+            serde_json::from_slice(&decrypted).context("Failed to deserialize alert")?;
+        Ok(alert)
+    }
+
+    fn decode_summary_history(&self, blob: &[u8]) -> Result<SummaryHistory> {
+        let decrypted = self.encryption.open(blob)?;
+        let summary: SummaryHistory =
+            serde_json::from_slice(&decrypted).context("Failed to deserialize summary history")?;
+        Ok(summary)
     }
 }
 

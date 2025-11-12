@@ -5,8 +5,8 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { DoseLog } from '../api/peptrack'
-import { listDoseLogs, createDoseLog, deleteDoseLog } from '../api/peptrack'
+import type { DoseLog, LogDosePayload } from '../api/peptrack'
+import { listDoseLogs, listDoseLogsForProtocol, logDose as apiLogDose, deleteDoseLog } from '../api/peptrack'
 import { showErrorToast, showSuccessToast } from '../utils/errorHandling'
 
 export const useDoseStore = defineStore('doses', () => {
@@ -20,20 +20,20 @@ export const useDoseStore = defineStore('doses', () => {
 
   const recentDoses = computed(() =>
     [...doses.value]
-      .sort((a, b) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime())
+      .sort((a, b) => new Date(b.logged_at).getTime() - new Date(a.logged_at).getTime())
       .slice(0, 10)
   )
 
   const dosesThisWeek = computed(() => {
     const weekAgo = new Date()
     weekAgo.setDate(weekAgo.getDate() - 7)
-    return doses.value.filter(d => new Date(d.loggedAt) >= weekAgo)
+    return doses.value.filter(d => new Date(d.logged_at) >= weekAgo)
   })
 
   const dosesThisMonth = computed(() => {
     const monthAgo = new Date()
     monthAgo.setMonth(monthAgo.getMonth() - 1)
-    return doses.value.filter(d => new Date(d.loggedAt) >= monthAgo)
+    return doses.value.filter(d => new Date(d.logged_at) >= monthAgo)
   })
 
   // Actions
@@ -41,8 +41,8 @@ export const useDoseStore = defineStore('doses', () => {
     loading.value = true
     try {
       const data = protocolId
-        ? await listDoseLogs(protocolId)
-        : []
+        ? await listDoseLogsForProtocol(protocolId)
+        : await listDoseLogs()
 
       if (protocolId) {
         dosesByProtocol.value.set(protocolId, data)
@@ -59,17 +59,23 @@ export const useDoseStore = defineStore('doses', () => {
     }
   }
 
-  async function logDose(protocolId: string, dose: { amount: number; unit: string; notes?: string }) {
+  async function logDose(protocolId: string, site: string, amountMg: number, notes?: string) {
     loading.value = true
     try {
-      const newDose = await createDoseLog(protocolId, dose)
+      const payload: LogDosePayload = {
+        protocolId,
+        site,
+        amountMg,
+        notes
+      }
+      const newDose = await apiLogDose(payload)
 
       // Update cache
       const protocolDoses = dosesByProtocol.value.get(protocolId) || []
       dosesByProtocol.value.set(protocolId, [newDose, ...protocolDoses])
       doses.value.unshift(newDose)
 
-      showSuccessToast('Dose logged successfully')
+      showSuccessToast('Dose Logged', 'Dose logged successfully')
       return newDose
     } catch (error) {
       showErrorToast(error, { operation: 'log dose' })
@@ -82,7 +88,7 @@ export const useDoseStore = defineStore('doses', () => {
   async function removeDose(protocolId: string, doseId: string) {
     loading.value = true
     try {
-      await deleteDoseLog(protocolId, doseId)
+      await deleteDoseLog(doseId)
 
       // Update cache
       const protocolDoses = dosesByProtocol.value.get(protocolId) || []
@@ -92,7 +98,7 @@ export const useDoseStore = defineStore('doses', () => {
       )
       doses.value = doses.value.filter(d => d.id !== doseId)
 
-      showSuccessToast('Dose deleted successfully')
+      showSuccessToast('Dose Deleted', 'Dose deleted successfully')
     } catch (error) {
       showErrorToast(error, { operation: 'delete dose' })
       throw error

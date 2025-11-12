@@ -6,6 +6,11 @@ use tracing::info;
 
 use commands::{
     ai::{check_ai_availability, summarize_text},
+    analytics::{
+        add_price_history, clear_all_alerts, compare_prices, create_alert, delete_summary,
+        dismiss_alert, get_latest_price, list_alerts, list_price_history, list_summary_history,
+        mark_alert_read, save_summary,
+    },
     backup::{export_backup_data, get_backup_file_path},
     doses::{delete_dose_log, list_dose_logs, list_dose_logs_for_protocol, log_dose},
     drive::{
@@ -120,7 +125,20 @@ pub fn run() {
             list_inventory_by_protocol,
             get_inventory_item,
             update_inventory_item,
-            delete_inventory_item
+            delete_inventory_item,
+            // Analytics commands
+            add_price_history,
+            list_price_history,
+            get_latest_price,
+            compare_prices,
+            create_alert,
+            list_alerts,
+            mark_alert_read,
+            dismiss_alert,
+            clear_all_alerts,
+            save_summary,
+            list_summary_history,
+            delete_summary
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

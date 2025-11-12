@@ -148,6 +148,42 @@
 
         <div class="form-row">
           <div class="form-group">
+            <label for="inventory-remaining">
+              Remaining Quantity (mg)
+              <span class="help-text">(Auto-updates when doses logged)</span>
+            </label>
+            <input
+              id="inventory-remaining"
+              v-model.number="form.quantityRemainingMg"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="Same as initial quantity"
+              aria-label="Remaining quantity in milligrams"
+              autocomplete="off"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="inventory-low-stock">
+              Low Stock Alert (mg)
+              <span class="help-text">(Alert when remaining drops below)</span>
+            </label>
+            <input
+              id="inventory-low-stock"
+              v-model.number="form.lowStockThresholdMg"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="e.g., 2.0"
+              aria-label="Low stock threshold"
+              autocomplete="off"
+            />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
             <label for="inventory-batch">
               Batch Number
             </label>
@@ -388,9 +424,11 @@ const form = ref({
   expiryDate: '',
   costPerMg: null as number | null,
   quantityMg: null as number | null,
+  quantityRemainingMg: null as number | null,
   concentrationMgMl: null as number | null,
   batchNumber: '',
   lotNumber: '',
+  lowStockThresholdMg: null as number | null,
   notes: '',
 });
 
@@ -404,9 +442,11 @@ function resetForm() {
     expiryDate: '',
     costPerMg: null,
     quantityMg: null,
+    quantityRemainingMg: null,
     concentrationMgMl: null,
     batchNumber: '',
     lotNumber: '',
+    lowStockThresholdMg: null,
     notes: '',
   };
   editingItem.value = null;
@@ -423,9 +463,11 @@ function startEdit(item: InventoryItem) {
     expiryDate: (item.expiry_date || '').split('T')[0] || '',
     costPerMg: item.cost_per_mg !== null && item.cost_per_mg !== undefined ? item.cost_per_mg : null,
     quantityMg: item.quantity_mg !== null && item.quantity_mg !== undefined ? item.quantity_mg : null,
+    quantityRemainingMg: item.quantity_remaining_mg !== null && item.quantity_remaining_mg !== undefined ? item.quantity_remaining_mg : null,
     concentrationMgMl: item.concentration_mg_ml !== null && item.concentration_mg_ml !== undefined ? item.concentration_mg_ml : null,
     batchNumber: item.batch_number || '',
     lotNumber: item.lot_number || '',
+    lowStockThresholdMg: item.low_stock_threshold_mg !== null && item.low_stock_threshold_mg !== undefined ? item.low_stock_threshold_mg : null,
     notes: item.notes || '',
   };
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -438,16 +480,16 @@ function cancelEdit() {
 async function loadProtocols() {
   try {
     protocols.value = await listProtocols();
-  } catch (err) {
-    console.error('Failed to load protocols:', err);
+  } catch (_err) {
+    // Failed to load protocols, will show empty list
   }
 }
 
 async function loadSuppliers() {
   try {
     suppliers.value = await listSuppliers();
-  } catch (err) {
-    console.error('Failed to load suppliers:', err);
+  } catch (_err) {
+    // Failed to load suppliers, will show empty list
   }
 }
 
@@ -490,9 +532,11 @@ async function handleSaveItem() {
         expiryDate: form.value.expiryDate ? form.value.expiryDate : undefined,
         costPerMg: form.value.costPerMg !== null ? form.value.costPerMg : undefined,
         quantityMg: form.value.quantityMg !== null ? form.value.quantityMg : undefined,
+        quantityRemainingMg: form.value.quantityRemainingMg !== null ? form.value.quantityRemainingMg : undefined,
         concentrationMgMl: form.value.concentrationMgMl !== null ? form.value.concentrationMgMl : undefined,
         batchNumber: form.value.batchNumber ? form.value.batchNumber : undefined,
         lotNumber: form.value.lotNumber ? form.value.lotNumber : undefined,
+        lowStockThresholdMg: form.value.lowStockThresholdMg !== null ? form.value.lowStockThresholdMg : undefined,
         notes: form.value.notes ? form.value.notes : undefined,
       };
       await updateInventoryItem(editingItem.value.id, payload);
@@ -509,9 +553,11 @@ async function handleSaveItem() {
         expiryDate: form.value.expiryDate ? form.value.expiryDate : undefined,
         costPerMg: form.value.costPerMg !== null ? form.value.costPerMg : undefined,
         quantityMg: form.value.quantityMg !== null ? form.value.quantityMg : undefined,
+        quantityRemainingMg: form.value.quantityRemainingMg !== null ? form.value.quantityRemainingMg : undefined,
         concentrationMgMl: form.value.concentrationMgMl !== null ? form.value.concentrationMgMl : undefined,
         batchNumber: form.value.batchNumber ? form.value.batchNumber : undefined,
         lotNumber: form.value.lotNumber ? form.value.lotNumber : undefined,
+        lowStockThresholdMg: form.value.lowStockThresholdMg !== null ? form.value.lowStockThresholdMg : undefined,
         notes: form.value.notes ? form.value.notes : undefined,
       };
       await createInventoryItem(payload);

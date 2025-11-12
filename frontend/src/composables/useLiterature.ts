@@ -15,7 +15,7 @@ export function useLiterature() {
     searchLoading,
     summarizing,
     lastSearchQuery,
-    lastSearchProvider,
+    lastSearchSources,
     currentSummary,
     summaryProvider,
     hasSearchResults,
@@ -40,7 +40,7 @@ export function useLiterature() {
     searchLoading,
     summarizing,
     lastSearchQuery,
-    lastSearchProvider,
+    lastSearchSources,
     currentSummary,
     summaryProvider,
 
