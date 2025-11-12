@@ -12,6 +12,7 @@ import Settings from "./components/Settings.vue";
 import SupplierManagement from "./components/SupplierManagement.vue";
 import InventoryManagement from "./components/InventoryManagement.vue";
 import Toast from "./components/Toast.vue";
+import GlobalSearch from "./components/GlobalSearch.vue";
 
 // Navigation
 type View = "dashboard" | "doses" | "protocols" | "ai-assistant" | "research" | "operations" | "settings" | "alerts";
@@ -82,9 +83,16 @@ async function handleCreateProtocol() {
   }
 }
 
+// Global search ref
+const globalSearch = ref<InstanceType<typeof GlobalSearch> | null>(null);
+
 // Navigation helpers for Dashboard quick actions
 function handleNavigateToTab(tab: string) {
   currentView.value = tab as View;
+}
+
+function handleSearchNavigate(view: string) {
+  currentView.value = view as View;
 }
 
 function handleQuickLogDose() {
@@ -130,6 +138,7 @@ onUnmounted(() => {
 <template>
   <Toast />
   <WelcomeScreen ref="welcomeScreen" />
+  <GlobalSearch ref="globalSearch" @navigate="handleSearchNavigate" />
 
   <main class="page">
     <header>
