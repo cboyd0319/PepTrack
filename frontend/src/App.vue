@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
 import Dashboard from "./components/Dashboard.vue";
+import AlertsDashboard from "./components/AlertsDashboard.vue";
 import ProtocolList from "./components/ProtocolList.vue";
 import ProtocolForm from "./components/ProtocolForm.vue";
 import Research from "./components/Research.vue";
@@ -12,7 +13,7 @@ import InventoryManagement from "./components/InventoryManagement.vue";
 import Toast from "./components/Toast.vue";
 
 // Navigation
-type View = "dashboard" | "doses" | "protocols" | "research" | "operations" | "settings";
+type View = "dashboard" | "doses" | "protocols" | "research" | "operations" | "settings" | "alerts";
 const currentView = ref<View>("dashboard");
 
 // Welcome screen ref
@@ -96,6 +97,10 @@ async function handleQuickBackup() {
   } catch (error) {
     errorMessage.value = `Backup failed: ${String(error)}`;
   }
+}
+
+function handleViewAlerts() {
+  currentView.value = "alerts";
 }
 
 function showHelp() {
@@ -212,7 +217,18 @@ onUnmounted(() => {
         @navigateToTab="handleNavigateToTab"
         @quickLogDose="handleQuickLogDose"
         @quickBackup="handleQuickBackup"
+        @viewAlerts="handleViewAlerts"
       />
+    </div>
+
+    <!-- Alerts View -->
+    <div v-if="currentView === 'alerts'" class="view-content full-height">
+      <div class="back-navigation">
+        <button @click="currentView = 'dashboard'" class="back-btn">
+          ← Back to Dashboard
+        </button>
+      </div>
+      <AlertsDashboard @navigate="handleNavigateToTab" />
     </div>
 
     <!-- Doses View -->
@@ -511,5 +527,43 @@ header h1 {
     color: #ff6b6b;
     border-color: #6a2a2a;
   }
+
+  .back-btn {
+    background: #3a3a3a;
+    color: #fff;
+  }
+
+  .back-btn:hover {
+    background: #4a4a4a;
+  }
+}
+
+/* Back Navigation */
+.back-navigation {
+  padding: 12px 20px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.back-btn {
+  padding: 8px 16px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  color: #555;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.back-btn:hover {
+  background: #3498db;
+  color: white;
+  border-color: #3498db;
+  transform: translateX(-2px);
 }
 </style>

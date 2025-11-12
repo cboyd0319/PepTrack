@@ -28,6 +28,35 @@
       </div>
     </div>
 
+    <!-- System Alerts Widget -->
+    <div v-if="activeAlerts.length > 0" class="alerts-widget">
+      <div class="widget-header">
+        <div class="header-left">
+          <h2>🔔 Active Alerts</h2>
+          <span class="alert-count">{{ activeAlerts.length }}</span>
+        </div>
+        <button @click="viewAllAlerts" class="link-btn">View All →</button>
+      </div>
+      <div class="alerts-preview">
+        <div
+          v-for="alert in activeAlerts.slice(0, 3)"
+          :key="alert.id"
+          :class="['alert-preview-card', alert.severity]"
+        >
+          <div class="alert-preview-icon">
+            {{ getAlertIcon(alert.alert_type) }}
+          </div>
+          <div class="alert-preview-content">
+            <div class="alert-preview-title">{{ alert.title }}</div>
+            <div class="alert-preview-message">{{ alert.message }}</div>
+          </div>
+          <button @click="dismissAlertQuick(alert.id)" class="dismiss-btn" title="Dismiss">
+            ✕
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Stats Overview -->
     <div class="stats-grid">
       <div class="stat-card">
@@ -158,12 +187,15 @@ import { ref, computed, onMounted } from 'vue';
 import { useProtocolStore } from '../stores/protocols';
 import { useDoseStore } from '../stores/doses';
 import { useSupplierStore } from '../stores/suppliers';
-import type { PeptideProtocol } from '../api/peptrack';
+import type { PeptideProtocol, Alert, AlertType } from '../api/peptrack';
+import { listAlerts, dismissAlert } from '../api/peptrack';
+import { showErrorToast, showSuccessToast } from '../utils/errorHandling';
 
 const emit = defineEmits<{
   navigateToTab: [tab: string];
   quickLogDose: [];
   quickBackup: [];
+  viewAlerts: [];
 }>();
 
 // Stores
@@ -174,6 +206,7 @@ const supplierStore = useSupplierStore();
 // Data
 const cloudConnected = ref(false);
 const lastBackupTime = ref<string | null>(null);
+const activeAlerts = ref<Alert[]>([]);
 
 // Computed
 const protocols = computed(() => protocolStore.protocols);
@@ -195,6 +228,41 @@ function handleQuickLogDose() {
 
 function handleQuickBackup() {
   emit('quickBackup');
+}
+
+function viewAllAlerts() {
+  emit('viewAlerts');
+}
+
+async function loadAlerts() {
+  try {
+    const allAlerts = await listAlerts(false); // Don't include dismissed
+    activeAlerts.value = allAlerts.filter(a => !a.is_dismissed).slice(0, 5);
+  } catch (error) {
+    // Silent fail - alerts are not critical for dashboard
+  }
+}
+
+async function dismissAlertQuick(alertId: string) {
+  try {
+    await dismissAlert(alertId);
+    activeAlerts.value = activeAlerts.value.filter(a => a.id !== alertId);
+    showSuccessToast('Dismissed', 'Alert dismissed');
+  } catch (error) {
+    showErrorToast(error, { operation: 'dismiss alert' });
+  }
+}
+
+function getAlertIcon(type: AlertType): string {
+  const icons: Record<AlertType, string> = {
+    low_stock: '📉',
+    expiring_soon: '⏰',
+    expired: '⚠️',
+    price_increase: '📈',
+    price_decrease: '📉',
+    out_of_stock: '❌',
+  };
+  return icons[type] || '🔔';
 }
 
 function getProtocolName(protocolId: string): string {
@@ -254,6 +322,7 @@ async function loadData() {
 
 onMounted(() => {
   loadData();
+  loadAlerts();
 });
 </script>
 
@@ -637,6 +706,149 @@ onMounted(() => {
 
   .btn-secondary:hover {
     background: #4a4a4a;
+  }
+}
+
+/* Alerts Widget Styles */
+.alerts-widget {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.widget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.widget-header h2 {
+  color: white;
+  margin: 0;
+  font-size: 20px;
+}
+
+.alert-count {
+  background: rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.widget-header .link-btn {
+  color: white;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 6px 12px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.widget-header .link-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.alerts-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.alert-preview-card {
+  background: white;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: all 0.2s;
+  border-left: 4px solid;
+}
+
+.alert-preview-card:hover {
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.alert-preview-card.critical {
+  border-left-color: #e74c3c;
+}
+
+.alert-preview-card.warning {
+  border-left-color: #f39c12;
+}
+
+.alert-preview-card.info {
+  border-left-color: #3498db;
+}
+
+.alert-preview-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.alert-preview-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.alert-preview-title {
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.alert-preview-message {
+  font-size: 13px;
+  color: #666;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dismiss-btn {
+  background: #f5f5f5;
+  border: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #999;
+  font-size: 16px;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.dismiss-btn:hover {
+  background: #e74c3c;
+  color: white;
+}
+
+@media (max-width: 768px) {
+  .alerts-widget {
+    padding: 16px;
+  }
+
+  .widget-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .alert-preview-message {
+    white-space: normal;
+    line-height: 1.4;
   }
 }
 </style>
