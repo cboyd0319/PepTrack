@@ -81,9 +81,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  if (window.showToast) {
-    window.showToast = undefined as any;
-  }
+  delete (window as any).showToast;
 });
 
 defineExpose({

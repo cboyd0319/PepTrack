@@ -65,13 +65,13 @@ function handleTestNotification() {
               body: 'This is a test notification from PepTrack!',
             });
           }
-        }).catch((error) => {
-          console.error('Failed to request notification permission:', error);
+        }).catch((_error) => {
+          // Notification permission request failed, user will need to enable manually
         });
       }
     }
-  } catch (error) {
-    console.error('Notification API error:', error);
+  } catch (_error) {
+    // Notification API not available or blocked
   }
 }
 </script>

@@ -438,16 +438,16 @@ function cancelEdit() {
 async function loadProtocols() {
   try {
     protocols.value = await listProtocols();
-  } catch (err) {
-    console.error('Failed to load protocols:', err);
+  } catch (_err) {
+    // Failed to load protocols, will show empty list
   }
 }
 
 async function loadSuppliers() {
   try {
     suppliers.value = await listSuppliers();
-  } catch (err) {
-    console.error('Failed to load suppliers:', err);
+  } catch (_err) {
+    // Failed to load suppliers, will show empty list
   }
 }
 

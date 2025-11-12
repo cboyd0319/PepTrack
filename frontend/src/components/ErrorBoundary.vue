@@ -33,7 +33,7 @@ const error = ref<Error | null>(null)
 onErrorCaptured((err) => {
   error.value = err as Error
   props.onError?.(err as Error)
-  console.error('ErrorBoundary caught:', err)
+  // Error is already displayed in the UI
   return false // Prevent error from propagating
 })
 

@@ -206,8 +206,8 @@ async function openLink(rawUrl?: string | null) {
 
   try {
     await openExternalLink(url);
-  } catch (error) {
-    console.warn('Failed to open via Tauri command, falling back:', error);
+  } catch (_error) {
+    // Fallback to browser default if Tauri command fails
     window.open(url, '_blank', 'noopener,noreferrer');
   }
 }

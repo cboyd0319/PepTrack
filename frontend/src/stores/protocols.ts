@@ -69,7 +69,7 @@ export const useProtocolStore = defineStore('protocols', () => {
       // Optimistic update
       protocols.value.unshift(newProtocol)
 
-      showSuccessToast('Protocol created successfully', { operation: 'create protocol' })
+      showSuccessToast('Protocol Created', 'Protocol created successfully')
       return newProtocol
     } catch (error) {
       showErrorToast(error, { operation: 'create protocol' })
@@ -90,19 +90,21 @@ export const useProtocolStore = defineStore('protocols', () => {
       const index = protocols.value.findIndex(p => p.id === id)
       if (index !== -1) {
         const current = protocols.value[index]
-        protocols.value[index] = {
-          ...current,
-          name: payload.name || current.name,
-          peptide_name: payload.peptideName || current.peptide_name,
-          notes: payload.notes ?? current.notes,
-          target_concentration_mg_ml: payload.targetConcentrationMgMl ?? current.target_concentration_mg_ml,
-          updated_at: new Date().toISOString()
+        if (current) {
+          protocols.value[index] = {
+            ...current,
+            name: payload.name || current.name,
+            peptide_name: payload.peptideName || current.peptide_name,
+            notes: payload.notes ?? current.notes,
+            target_concentration_mg_ml: payload.targetConcentrationMgMl ?? current.target_concentration_mg_ml,
+            updated_at: new Date().toISOString()
+          }
         }
       }
 
       const updated = await saveProtocol({ ...payload, name: payload.name || '', peptideName: payload.peptideName || '' })
 
-      showSuccessToast('Protocol updated successfully', { operation: 'update protocol' })
+      showSuccessToast('Protocol Updated', 'Protocol updated successfully')
       return updated
     } catch (error) {
       // Rollback on error
@@ -114,7 +116,7 @@ export const useProtocolStore = defineStore('protocols', () => {
     }
   }
 
-  async function removeProtocol(id: string) {
+  async function removeProtocol(_id: string) {
     // Note: No delete API available yet
     console.warn('Protocol deletion not yet implemented in backend')
     showErrorToast(new Error('Protocol deletion not yet available'), { operation: 'delete protocol' })

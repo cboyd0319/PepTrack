@@ -38,7 +38,7 @@ function savePreferences() {
     };
     localStorage.setItem("notification_preferences", JSON.stringify(prefs));
   } catch (error) {
-    console.warn('Failed to save notification preferences to localStorage:', error);
+    // Silently fail if localStorage is unavailable
   }
 }
 

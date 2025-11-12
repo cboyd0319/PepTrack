@@ -60,8 +60,7 @@ async function startOAuthFlow() {
     try {
       localStorage.setItem("drive_oauth_config", JSON.stringify(oauthConfig.value));
       localStorage.setItem("drive_oauth_state", response.state);
-    } catch (storageError) {
-      console.warn('Failed to store OAuth state in localStorage:', storageError);
+    } catch (_storageError) {
       // Continue anyway - OAuth can still work without localStorage persistence
     }
 
