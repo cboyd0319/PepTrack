@@ -20,6 +20,10 @@ use commands::{
     literature::{list_literature, open_external_url, search_cached_literature, search_literature},
     protocols::{list_protocols, save_protocol},
     restore::{preview_backup, restore_from_backup},
+    schedules::{
+        create_dose_schedule, delete_dose_schedule, get_pending_dose_reminders,
+        list_dose_schedules, update_dose_schedule,
+    },
     scheduler_v2::{
         get_backup_history, get_backup_progress, get_backup_schedule, trigger_manual_backup,
         update_backup_schedule, SchedulerState,
@@ -139,7 +143,13 @@ pub fn run() {
             clear_all_alerts,
             save_summary,
             list_summary_history,
-            delete_summary
+            delete_summary,
+            // Dose schedule commands
+            create_dose_schedule,
+            list_dose_schedules,
+            update_dose_schedule,
+            delete_dose_schedule,
+            get_pending_dose_reminders
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -636,3 +636,61 @@ export async function listSummaryHistory(limit?: number) {
 export async function deleteSummaryFromHistory(summaryId: string) {
   return invoke<void>("delete_summary", { summaryId });
 }
+
+// Dose Schedule types
+
+export interface DoseSchedule {
+  id: string;
+  protocolId: string;
+  protocolName: string;
+  peptideName: string;
+  amountMg: number;
+  site?: string | null;
+  timeOfDay: string; // Format: "HH:MM"
+  daysOfWeek: number[]; // 0=Sunday, 1=Monday, ..., 6=Saturday
+  enabled: boolean;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateSchedulePayload {
+  protocolId: string;
+  amountMg: number;
+  site?: string;
+  timeOfDay: string;
+  daysOfWeek: number[];
+  notes?: string;
+}
+
+export interface UpdateSchedulePayload {
+  id: string;
+  amountMg?: number;
+  site?: string;
+  timeOfDay?: string;
+  daysOfWeek?: number[];
+  enabled?: boolean;
+  notes?: string;
+}
+
+// Dose Schedule API calls
+
+export async function createDoseSchedule(payload: CreateSchedulePayload) {
+  return invoke<DoseSchedule>("create_dose_schedule", { payload });
+}
+
+export async function listDoseSchedules() {
+  return invoke<DoseSchedule[]>("list_dose_schedules");
+}
+
+export async function updateDoseSchedule(payload: UpdateSchedulePayload) {
+  return invoke<DoseSchedule>("update_dose_schedule", { payload });
+}
+
+export async function deleteDoseSchedule(scheduleId: string) {
+  return invoke<void>("delete_dose_schedule", { scheduleId });
+}
+
+export async function getPendingDoseReminders() {
+  return invoke<DoseSchedule[]>("get_pending_dose_reminders");
+}
