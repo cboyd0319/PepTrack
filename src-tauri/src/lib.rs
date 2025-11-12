@@ -12,6 +12,7 @@ use commands::{
         mark_alert_read, save_summary,
     },
     backup::{export_backup_data, get_backup_file_path},
+    defaults::{get_default_peptides, populate_default_peptides},
     doses::{delete_dose_log, list_dose_logs, list_dose_logs_for_protocol, log_dose},
     drive::{
         check_drive_status, complete_drive_oauth, disconnect_drive, start_drive_oauth,
@@ -20,6 +21,10 @@ use commands::{
     literature::{list_literature, open_external_url, search_cached_literature, search_literature},
     protocols::{list_protocols, save_protocol},
     restore::{preview_backup, restore_from_backup},
+    schedules::{
+        create_dose_schedule, delete_dose_schedule, get_pending_dose_reminders,
+        list_dose_schedules, update_dose_schedule,
+    },
     scheduler_v2::{
         get_backup_history, get_backup_progress, get_backup_schedule, trigger_manual_backup,
         update_backup_schedule, SchedulerState,
@@ -139,7 +144,16 @@ pub fn run() {
             clear_all_alerts,
             save_summary,
             list_summary_history,
-            delete_summary
+            delete_summary,
+            // Dose schedule commands
+            create_dose_schedule,
+            list_dose_schedules,
+            update_dose_schedule,
+            delete_dose_schedule,
+            get_pending_dose_reminders,
+            // Default peptides
+            get_default_peptides,
+            populate_default_peptides
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

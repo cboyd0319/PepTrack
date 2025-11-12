@@ -43,3 +43,4 @@ flate2 = "1.0"
 fslock = "0.2"
 base64 = "0.22"
 regex = "1.11"
+uuid = { version = "1.18.1", features = ["v4"] }
