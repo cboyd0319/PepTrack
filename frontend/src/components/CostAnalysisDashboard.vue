@@ -172,8 +172,7 @@ import {
   listInventory,
   listDoseLogs,
   listSuppliers,
-  type InventoryItem,
-  type Supplier,
+  listProtocols,
 } from '../api/peptrack';
 
 interface PeptideSpending {
@@ -243,10 +242,11 @@ onMounted(async () => {
 async function loadCostData() {
   loading.value = true;
   try {
-    const [inventory, doses, suppliers] = await Promise.all([
+    const [inventory, doses, suppliers, protocols] = await Promise.all([
       listInventory(),
       listDoseLogs(),
       listSuppliers(),
+      listProtocols(),
     ]);
 
     // Calculate total spent
@@ -271,11 +271,13 @@ async function loadCostData() {
     // Calculate spending by peptide
     const peptideMap = new Map<string, { cost: number; quantity: number }>();
     inventory.forEach(item => {
-      const existing = peptideMap.get(item.peptide_name) || { cost: 0, quantity: 0 };
+      const protocol = protocols.find(p => p.id === item.protocol_id);
+      const peptideName = protocol?.peptide_name || 'Unknown Peptide';
+      const existing = peptideMap.get(peptideName) || { cost: 0, quantity: 0 };
       const cost = item.cost_per_mg && item.quantity_mg
         ? item.cost_per_mg * item.quantity_mg
         : 0;
-      peptideMap.set(item.peptide_name, {
+      peptideMap.set(peptideName, {
         cost: existing.cost + cost,
         quantity: existing.quantity + (item.quantity_mg || 0),
       });
@@ -364,15 +366,18 @@ function generateCostTips(suppliers: SupplierComparison[], peptides: PeptideSpen
   if (suppliers.length > 1) {
     const expensive = suppliers[suppliers.length - 1];
     const cheap = suppliers[0];
-    const savings = (expensive.avgPrice - cheap.avgPrice) * 100; // Assume 100mg
 
-    if (savings > 0) {
-      tips.push({
-        icon: '🔄',
-        title: 'Switch to Lower-Cost Supplier',
-        description: `Consider switching from ${expensive.name} to ${cheap.name} for better pricing.`,
-        savings,
-      });
+    if (expensive && cheap) {
+      const savings = (expensive.avgPrice - cheap.avgPrice) * 100; // Assume 100mg
+
+      if (savings > 0) {
+        tips.push({
+          icon: '🔄',
+          title: 'Switch to Lower-Cost Supplier',
+          description: `Consider switching from ${expensive.name} to ${cheap.name} for better pricing.`,
+          savings,
+        });
+      }
     }
   }
 

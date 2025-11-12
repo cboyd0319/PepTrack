@@ -14,9 +14,11 @@ PepTrack is a macOS-first desktop application built with Rust, Tauri, and Vue 3,
 - **Supplier & Inventory** - Track suppliers, manage vial inventory with expiry dates and batch tracking
 - **Literature Search** - Integrated search across PubMed, OpenAlex, and Crossref APIs
 - **Local AI Summaries** - Generate research summaries using local Codex or Claude CLI
+- **AI-Powered Protocol Recommender** - Get science-backed protocol recommendations from research papers
 - **Comprehensive Backup System**:
   - Manual and scheduled automatic backups (hourly/daily/weekly)
   - Google Drive OAuth integration for cloud backups
+  - Google Calendar integration for dose schedules
   - Backup compression, preview, and restore functionality
   - Automatic cleanup with configurable retention policies
 - **Desktop Notifications** - Configurable notifications for backup events
@@ -25,6 +27,24 @@ PepTrack is a macOS-first desktop application built with Rust, Tauri, and Vue 3,
   - macOS Keychain integration for encryption keys
   - Automatic key migration from file-based storage
   - Zero telemetry or tracking
+
+### UI/UX Features
+- **Enhanced Dashboard** - Comprehensive analytics with multiple visualization widgets:
+  - 📅 **Dose Calendar Heatmap** - GitHub-style 365-day adherence visualization with streak tracking
+  - 📊 **Protocol Progress Tracker** - Circular progress rings showing protocol completion and milestones
+  - 💰 **Cost Analysis Dashboard** - Supplier comparison, spending analytics, and optimization tips
+  - 📋 **Recent Activity Timeline** - Chronological feed of all user actions with date grouping
+- **Global Search** - Lightning-fast search across all data (Cmd+K or Cmd+P)
+- **Keyboard Shortcuts** - Power user shortcuts for navigation and actions:
+  - Press `?` to view all available shortcuts
+  - `1-8` for quick tab navigation
+  - `Cmd+K` for global search
+  - Tab-specific shortcuts for common actions
+- **Quick Actions FAB** - Floating action button for one-click access to common tasks
+- **Onboarding Flow** - Interactive 8-step guided tour for new users
+- **Dark Mode** - Full dark mode support with toggle in settings
+- **Empty States** - Beautiful, actionable empty states throughout the app
+- **Loading Skeletons** - Smooth loading animations for better perceived performance
 
 ---
 
@@ -37,7 +57,7 @@ graph TB
     subgraph "Frontend Layer"
         Vue[Vue 3 SPA<br/>TypeScript + Vite]
         Pinia[Pinia State Management<br/>5 Stores]
-        Components[Vue Components<br/>18 Components]
+        Components[Vue Components<br/>30+ Components]
     end
 
     subgraph "Tauri Bridge"
@@ -169,7 +189,19 @@ PepTrack/
 ├── frontend/                      # Vue 3 + Vite SPA
 │   ├── src/
 │   │   ├── App.vue               # Main application
-│   │   ├── components/           # 18 Vue components
+│   │   ├── components/           # 30+ Vue components
+│   │   │   ├── Dashboard.vue            # Enhanced dashboard with analytics
+│   │   │   ├── DoseCalendarHeatmap.vue  # 365-day adherence heatmap
+│   │   │   ├── ProtocolProgressTracker.vue # Protocol progress rings
+│   │   │   ├── CostAnalysisDashboard.vue   # Cost analytics & tips
+│   │   │   ├── RecentActivityTimeline.vue  # Activity feed
+│   │   │   ├── GlobalSearch.vue            # Global search (Cmd+K)
+│   │   │   ├── KeyboardShortcutsHelp.vue   # Shortcuts help (?)
+│   │   │   ├── OnboardingFlow.vue          # 8-step guided tour
+│   │   │   ├── QuickActionsFAB.vue         # Floating action button
+│   │   │   ├── EmptyState.vue              # Reusable empty states
+│   │   │   ├── LoadingSkeleton.vue         # Loading animations
+│   │   │   └── ... (20+ more components)
 │   │   ├── stores/               # 5 Pinia stores
 │   │   ├── composables/          # Vue composables
 │   │   ├── api/                  # Tauri IPC wrappers
@@ -336,11 +368,24 @@ cargo tauri build
 - ✅ Supplier & inventory management
 - ✅ Literature search (PubMed, OpenAlex, Crossref)
 - ✅ Local AI summarization (Codex/Claude)
+- ✅ AI-powered protocol recommender
 - ✅ Manual and scheduled backups
 - ✅ Google Drive OAuth integration
+- ✅ Google Calendar integration
 - ✅ macOS Keychain integration
 - ✅ Desktop notifications
 - ✅ Comprehensive error handling
+- ✅ Enhanced dashboard with analytics widgets
+- ✅ Dose calendar heatmap (365-day visualization)
+- ✅ Protocol progress tracker
+- ✅ Cost analysis dashboard
+- ✅ Recent activity timeline
+- ✅ Global search (Cmd+K)
+- ✅ Keyboard shortcuts system
+- ✅ Quick Actions FAB
+- ✅ Onboarding flow
+- ✅ Dark mode support
+- ✅ Empty states and loading skeletons
 
 ### In Progress 🚧
 - Background reminders for dose schedules
@@ -350,9 +395,8 @@ cargo tauri build
 - Cloud restore (restore directly from Google Drive)
 - Multi-cloud support (Dropbox, OneDrive)
 - Backup encryption with user-managed passwords
-- Dashboard with usage analytics
 - Data export (CSV/JSON)
-- Keyboard shortcuts for power users
+- Mobile companion app
 
 ---
 

@@ -7,7 +7,7 @@
             <!-- Progress -->
             <div class="onboarding-progress">
               <div
-                v-for="(step, index) in steps"
+                v-for="(_step, index) in steps"
                 :key="index"
                 class="progress-dot"
                 :class="{ active: index === currentStep, completed: index < currentStep }"
@@ -15,14 +15,14 @@
             </div>
 
             <!-- Step Content -->
-            <div class="step-content">
-              <div class="step-icon">{{ steps[currentStep].icon }}</div>
-              <h2 class="step-title">{{ steps[currentStep].title }}</h2>
-              <p class="step-description">{{ steps[currentStep].description }}</p>
+            <div v-if="steps[currentStep]" class="step-content">
+              <div class="step-icon">{{ steps[currentStep]?.icon }}</div>
+              <h2 class="step-title">{{ steps[currentStep]?.title }}</h2>
+              <p class="step-description">{{ steps[currentStep]?.description }}</p>
 
               <!-- Interactive Demo -->
-              <div v-if="steps[currentStep].demo" class="step-demo">
-                <component :is="steps[currentStep].demo" />
+              <div v-if="steps[currentStep]?.demo" class="step-demo">
+                <component :is="steps[currentStep]?.demo" />
               </div>
             </div>
 

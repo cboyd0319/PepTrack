@@ -179,6 +179,21 @@
         </div>
       </div>
     </div>
+
+    <!-- Enhanced Analytics Widgets -->
+    <div class="analytics-section">
+      <!-- Dose Calendar Heatmap -->
+      <DoseCalendarHeatmap />
+
+      <!-- Protocol Progress Tracker -->
+      <ProtocolProgressTracker />
+
+      <!-- Recent Activity Timeline -->
+      <RecentActivityTimeline />
+
+      <!-- Cost Analysis Dashboard -->
+      <CostAnalysisDashboard />
+    </div>
   </div>
 </template>
 
@@ -190,6 +205,10 @@ import { useSupplierStore } from '../stores/suppliers';
 import type { PeptideProtocol, Alert, AlertType } from '../api/peptrack';
 import { listAlerts, dismissAlert } from '../api/peptrack';
 import { showErrorToast, showSuccessToast } from '../utils/errorHandling';
+import DoseCalendarHeatmap from './DoseCalendarHeatmap.vue';
+import ProtocolProgressTracker from './ProtocolProgressTracker.vue';
+import CostAnalysisDashboard from './CostAnalysisDashboard.vue';
+import RecentActivityTimeline from './RecentActivityTimeline.vue';
 
 const emit = defineEmits<{
   navigateToTab: [tab: string];
@@ -850,5 +869,13 @@ onMounted(() => {
     white-space: normal;
     line-height: 1.4;
   }
+}
+
+/* Enhanced Analytics Widgets */
+.analytics-section {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-top: 24px;
 }
 </style>

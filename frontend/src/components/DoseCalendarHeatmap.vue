@@ -208,13 +208,13 @@ async function loadDoseData() {
     for (let i = 0; i < 365; i++) {
       const date = new Date(startDate);
       date.setDate(startDate.getDate() + i);
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = date.toISOString().split('T')[0]!;
       daysMap.set(dateStr, 0);
     }
 
     // Count doses per day
     filteredDoses.forEach(dose => {
-      const dateStr = dose.administered_at.split('T')[0];
+      const dateStr = dose.logged_at.split('T')[0]!;
       if (daysMap.has(dateStr)) {
         daysMap.set(dateStr, (daysMap.get(dateStr) || 0) + 1);
       }
@@ -232,7 +232,7 @@ async function loadDoseData() {
     for (let i = 0; i < 371; i++) { // 53 weeks * 7 days
       const date = new Date(firstDate);
       date.setDate(firstDate.getDate() + i);
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = date.toISOString().split('T')[0]!;
       const count = daysMap.get(dateStr) || 0;
 
       let level = 0;
@@ -259,11 +259,11 @@ async function loadDoseData() {
   }
 }
 
-function calculateStats(doses: Dose[]) {
+function calculateStats(doses: DoseLog[]) {
   stats.value.totalDoses = doses.length;
 
   // Calculate streaks
-  const doseDates = new Set(doses.map(d => d.administered_at.split('T')[0]));
+  const doseDates = new Set(doses.map(d => d.logged_at.split('T')[0]));
   let currentStreak = 0;
   let longestStreak = 0;
   let streak = 0;

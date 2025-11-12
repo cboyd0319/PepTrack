@@ -88,9 +88,6 @@ import {
   listDoseLogs,
   listInventory,
   listProtocols,
-  type DoseLog,
-  type InventoryItem,
-  type PeptideProtocol,
 } from '../api/peptrack';
 
 type ActivityType = 'dose' | 'inventory' | 'protocol' | 'alert' | 'backup';
@@ -135,21 +132,13 @@ const groupedActivities = computed<ActivityGroup[]>(() => {
     date.setHours(0, 0, 0, 0);
 
     let dateKey: string;
-    let label: string;
 
     if (date.getTime() === today.getTime()) {
       dateKey = 'today';
-      label = 'Today';
     } else if (date.getTime() === yesterday.getTime()) {
       dateKey = 'yesterday';
-      label = 'Yesterday';
     } else {
-      dateKey = date.toISOString().split('T')[0];
-      label = date.toLocaleDateString('en-US', {
-        month: 'long',
-        day: 'numeric',
-        year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined,
-      });
+      dateKey = date.toISOString().split('T')[0]!;
     }
 
     if (!groups.has(dateKey)) {
@@ -200,12 +189,12 @@ async function loadActivity() {
           type: 'dose',
           title: 'Dose Administered',
           description: protocol
-            ? `${protocol.name} - ${dose.dose_amount_mcg}mcg`
-            : `Dose of ${dose.dose_amount_mcg}mcg`,
-          timestamp: dose.administered_at,
+            ? `${protocol.name} - ${dose.amount_mg}mcg`
+            : `Dose of ${dose.amount_mg}mcg`,
+          timestamp: dose.logged_at,
           metadata: {
-            Amount: `${dose.dose_amount_mcg}mcg`,
-            ...(dose.injection_site && { Site: dose.injection_site }),
+            Amount: `${dose.amount_mg}mcg`,
+            ...(dose.site && { Site: dose.site }),
           },
         });
       });
@@ -214,14 +203,16 @@ async function loadActivity() {
     // Convert inventory to activities
     if (selectedFilter.value === 'all' || selectedFilter.value === 'inventory') {
       inventory.forEach(item => {
+        const protocol = protocols.find(p => p.id === item.protocol_id);
+        const peptideName = protocol?.peptide_name || 'Unknown Peptide';
         activityList.push({
           id: `inventory-${item.id}`,
           type: 'inventory',
           title: 'Inventory Added',
-          description: `${item.peptide_name} - ${item.quantity_mg}mg`,
-          timestamp: item.received_at || item.purchased_at || new Date().toISOString(),
+          description: `${peptideName} - ${item.quantity_mg || 0}mg`,
+          timestamp: item.purchase_date || item.created_at || new Date().toISOString(),
           metadata: {
-            Quantity: `${item.quantity_mg}mg`,
+            Quantity: `${item.quantity_mg || 0}mg`,
             ...(item.cost_per_mg && { Cost: `$${item.cost_per_mg}/mg` }),
           },
         });

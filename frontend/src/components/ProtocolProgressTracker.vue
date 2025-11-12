@@ -120,7 +120,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { listProtocols, listDoseLogs, type PeptideProtocol, type DoseLog } from '../api/peptrack';
+import { listProtocols, listDoseLogs, type PeptideProtocol } from '../api/peptrack';
 
 interface Milestone {
   day: number;
@@ -167,10 +167,10 @@ async function loadProgressData() {
 
       // Find first and last dose
       const sortedDoses = protocolDoses.sort((a, b) =>
-        new Date(a.administered_at).getTime() - new Date(b.administered_at).getTime()
+        new Date(a.logged_at).getTime() - new Date(b.logged_at).getTime()
       );
 
-      const startDate = sortedDoses[0].administered_at;
+      const startDate = sortedDoses[0]!.logged_at;
       const today = new Date();
 
       // Assume 90-day cycle (can be made configurable)
