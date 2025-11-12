@@ -24,6 +24,7 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde::Deserialize;
+use serde_json::Value;
 use tracing::debug;
 
 use crate::models::{LiteratureFetcher, LiteratureResult};
@@ -100,6 +101,16 @@ impl LiteratureFetcher for OpenAlexFetcher {
                 // Extract DOI from id (format: https://openalex.org/W1234567)
                 let doi = work.doi.clone();
 
+                let abstract_text = work
+                    .abstract_inverted_index
+                    .as_ref()
+                    .and_then(reconstruct_abstract)
+                    .or_else(|| {
+                        work.abstract_inverted_index
+                            .as_ref()
+                            .map(|_| String::from("[Abstract available at source]"))
+                    });
+
                 LiteratureResult {
                     source: "openalex".to_string(),
                     title: work.title.clone(),
@@ -110,11 +121,7 @@ impl LiteratureFetcher for OpenAlexFetcher {
                     journal: work
                         .primary_location
                         .and_then(|loc| loc.source.map(|s| s.display_name)),
-                    abstract_text: work.abstract_inverted_index.map(|_| {
-                        // OpenAlex stores abstracts as inverted indexes for compression
-                        // For simplicity, we'll skip reconstruction for now
-                        String::from("[Abstract available at source]")
-                    }),
+                    abstract_text,
                 }
             })
             .collect();
@@ -124,6 +131,42 @@ impl LiteratureFetcher for OpenAlexFetcher {
 
     fn source_name(&self) -> &'static str {
         "openalex"
+    }
+}
+
+fn reconstruct_abstract(index: &Value) -> Option<String> {
+    let obj = index.as_object()?;
+    let mut max_pos = 0usize;
+
+    for positions in obj.values() {
+        if let Some(arr) = positions.as_array() {
+            for pos in arr {
+                if let Some(p) = pos.as_u64() {
+                    if (p as usize) > max_pos {
+                        max_pos = p as usize;
+                    }
+                }
+            }
+        }
+    }
+
+    let mut words = vec![String::new(); max_pos + 1];
+    for (word, positions) in obj.iter() {
+        if let Some(arr) = positions.as_array() {
+            for pos in arr {
+                if let Some(p) = pos.as_u64() {
+                    if let Some(slot) = words.get_mut(p as usize) {
+                        *slot = word.clone();
+                    }
+                }
+            }
+        }
+    }
+
+    if words.iter().all(|w| w.is_empty()) {
+        None
+    } else {
+        Some(words.join(" "))
     }
 }
 

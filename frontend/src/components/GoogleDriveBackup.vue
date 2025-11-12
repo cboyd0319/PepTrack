@@ -15,6 +15,8 @@ const driveStatus = ref<DriveStatus | null>(null);
 const loading = ref(false);
 const message = ref<string | null>(null);
 const errorMessage = ref<string | null>(null);
+const copyFeedback = ref<string | null>(null);
+const redirectUri = "http://localhost:8080/oauth/callback";
 
 // OAuth configuration
 const showConfigForm = ref(false);
@@ -115,6 +117,19 @@ async function handleBackupToDrive() {
   }
 }
 
+async function copyRedirectUri() {
+  try {
+    await navigator.clipboard.writeText(redirectUri);
+    copyFeedback.value = "Copied! Paste this into Google Cloud.";
+  } catch {
+    copyFeedback.value = "Copy failed. Please select and copy the text manually.";
+  } finally {
+    setTimeout(() => {
+      copyFeedback.value = null;
+    }, 3000);
+  }
+}
+
 onMounted(() => {
   loadDriveStatus();
 
@@ -168,13 +183,26 @@ onMounted(() => {
         </div>
 
         <div class="setup-instructions">
-          <p><strong>Follow these steps:</strong></p>
+          <p class="instructions-title">Follow these steps (about 2 minutes):</p>
           <ol>
-            <li>Go to <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a></li>
-            <li>Create a new OAuth 2.0 Client ID (Desktop application)</li>
-            <li>Add redirect URI: <code>http://localhost:8080/oauth/callback</code></li>
-            <li>Copy your Client ID and Client Secret below</li>
+            <li>Open the <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a> and click <strong>Create Credentials → OAuth client ID</strong>.</li>
+            <li>Choose <strong>Desktop App</strong>, name it "PepTrack Backups", and finish.</li>
+            <li>When asked for an authorized redirect URI, paste the one below.</li>
+            <li>Copy the Client ID + Secret Google shows you into the fields here.</li>
           </ol>
+          <div class="copy-row">
+            <div class="copy-content">
+              <span class="copy-label">Redirect URI</span>
+              <code>{{ redirectUri }}</code>
+            </div>
+            <button type="button" class="copy-btn" @click="copyRedirectUri">
+              📋 Copy
+            </button>
+          </div>
+          <p v-if="copyFeedback" class="copy-feedback">{{ copyFeedback }}</p>
+          <p class="setup-tip">
+            Need extra help? Just follow each step in order—no prior Google Cloud experience required.
+          </p>
         </div>
 
         <div class="form-group">
@@ -397,11 +425,22 @@ onMounted(() => {
 }
 
 .setup-instructions {
-  background: white;
+  background: #0f172a;
+  color: #f8fafc;
   padding: 16px;
-  border-radius: 6px;
+  border-radius: 8px;
   margin-bottom: 20px;
-  border-left: 3px solid #2196f3;
+  border-left: 4px solid #38bdf8;
+}
+
+.setup-instructions a {
+  color: #93c5fd;
+  text-decoration: underline;
+}
+
+.instructions-title {
+  margin: 0 0 8px 0;
+  font-weight: 600;
 }
 
 .setup-instructions ol {
@@ -411,14 +450,64 @@ onMounted(() => {
 
 .setup-instructions li {
   margin: 6px 0;
+  color: #e2e8f0;
 }
 
 .setup-instructions code {
-  background: #f4f4f4;
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-family: monospace;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: "SFMono-Regular", Consolas, monospace;
   font-size: 12px;
+  color: #f8fafc;
+}
+
+.copy-row {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.copy-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.copy-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #cbd5f5;
+}
+
+.copy-btn {
+  border: none;
+  border-radius: 6px;
+  background: #1d4ed8;
+  color: white;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.copy-btn:hover {
+  background: #1e40af;
+}
+
+.copy-feedback {
+  margin: 4px 0 0 0;
+  font-size: 13px;
+  color: #fef3c7;
+}
+
+.setup-tip {
+  margin: 8px 0 0 0;
+  font-size: 13px;
+  color: #e0e7ff;
 }
 
 .form-group {

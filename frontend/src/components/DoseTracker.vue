@@ -6,6 +6,12 @@
     <!-- Log New Dose Form -->
     <div class="log-dose-section panel">
       <h3>➕ Log a Dose</h3>
+      <div v-if="!hasProtocols" class="empty-state">
+        <p>
+          You need at least one peptide plan before logging doses.
+          Add a plan in the <strong>Protocols</strong> tab, then come back here.
+        </p>
+      </div>
       <form @submit.prevent="handleLogDose" class="dose-form">
         <label for="dose-protocol-select">
           Which Peptide Plan?
@@ -14,6 +20,7 @@
             v-model="form.protocolId"
             required
             aria-label="Select peptide protocol"
+            :disabled="!hasProtocols"
           >
             <option value="">Select a plan...</option>
             <option v-for="protocol in protocols" :key="protocol.id" :value="protocol.id">
@@ -65,7 +72,7 @@
 
         <button
           type="submit"
-          :disabled="isLogging"
+          :disabled="isLogging || !hasProtocols"
           class="primary-btn"
           aria-label="Log dose entry"
           :aria-busy="isLogging"
@@ -151,7 +158,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { showErrorToast, showSuccessToast } from '../utils/errorHandling';
 import {
   logDose,
@@ -171,6 +178,7 @@ const filterProtocolId = ref('');
 const isLogging = ref(false);
 const error = ref<string | null>(null);
 const successMessage = ref<string | null>(null);
+const hasProtocols = computed(() => protocols.value.length > 0);
 
 // Form state
 const form = ref<LogDosePayload>({
@@ -257,12 +265,23 @@ function getProtocolName(protocolId: string): string {
 }
 
 function formatDate(dateStr: string): string {
-  try {
-    const date = new Date(dateStr);
-    return date.toLocaleString();
-  } catch {
-    return dateStr;
+  if (!dateStr) return "Unknown";
+
+  const normalized = dateStr.replace(" ", "T");
+  const parsed = Date.parse(normalized);
+
+  if (!Number.isNaN(parsed)) {
+    return new Date(parsed).toLocaleString();
   }
+
+  // Some drivers return microsecond precision like 2025-11-12T01:15:00.123456+00:00
+  const truncated = normalized.split(".")[0];
+  const retry = Date.parse(`${truncated}Z`);
+  if (!Number.isNaN(retry)) {
+    return new Date(retry).toLocaleString();
+  }
+
+  return dateStr;
 }
 </script>
 
@@ -297,6 +316,17 @@ h2 {
   margin-top: 0;
   margin-bottom: 15px;
   color: #2c3e50;
+}
+
+.empty-state {
+  margin-bottom: 15px;
+  padding: 12px;
+  border-radius: 6px;
+  background: #fff3cd;
+  border-left: 4px solid #f1c40f;
+  color: #5c4400;
+  font-size: 14px;
+  line-height: 1.4;
 }
 
 .dose-form {

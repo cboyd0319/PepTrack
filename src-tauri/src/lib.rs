@@ -12,7 +12,7 @@ use commands::{
         check_drive_status, complete_drive_oauth, disconnect_drive, start_drive_oauth,
         upload_to_drive, OAuthState,
     },
-    literature::{list_literature, search_cached_literature, search_literature},
+    literature::{list_literature, open_external_url, search_cached_literature, search_literature},
     protocols::{list_protocols, save_protocol},
     restore::{preview_backup, restore_from_backup},
     scheduler_v2::{
@@ -87,6 +87,7 @@ pub fn run() {
             check_ai_availability,
             summarize_text,
             list_literature,
+            open_external_url,
             search_cached_literature,
             search_literature,
             log_dose,

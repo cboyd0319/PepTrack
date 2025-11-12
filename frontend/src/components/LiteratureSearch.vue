@@ -45,10 +45,15 @@
           </p>
           <p v-if="result.abstract_text" class="abstract">{{ result.abstract_text }}</p>
           <div class="links">
-            <a v-if="result.url" :href="result.url" target="_blank" rel="noopener noreferrer">
+            <button type="button" class="link-btn" @click="openLink(result.url)">
               View Article →
-            </a>
+            </button>
             <span v-if="result.doi" class="doi">DOI: {{ result.doi }}</span>
+          </div>
+          <div class="result-actions">
+            <button type="button" class="ghost-btn" @click="summarizeResult(result)">
+              🤖 Send to AI Summary
+            </button>
           </div>
         </div>
       </div>
@@ -56,6 +61,9 @@
 
     <!-- Saved Papers -->
     <div class="cached-section">
+      <div class="auto-save-note">
+        🔖 Papers are saved to your library automatically every time you run a search.
+      </div>
       <div class="cached-header">
         <h3>Your Saved Papers ({{ cachedLiterature.length }})</h3>
         <button
@@ -88,9 +96,18 @@
           </div>
           <h4>{{ entry.title }}</h4>
           <p v-if="entry.summary" class="summary">{{ entry.summary }}</p>
-          <a v-if="entry.url" :href="entry.url" target="_blank" rel="noopener noreferrer" class="view-link">
+          <button
+            type="button"
+            class="view-link"
+            @click="openLink(entry.url)"
+          >
             📄 Read Paper →
-          </a>
+          </button>
+          <div class="result-actions">
+            <button type="button" class="ghost-btn" @click="summarizeSavedEntry(entry)">
+              🤖 Summarize Again
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -99,11 +116,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { showErrorToast } from '../utils/errorHandling';
+import { showErrorToast, showSuccessToast } from '../utils/errorHandling';
 import {
   listLiterature,
   searchCachedLiterature,
   searchLiterature,
+  openExternalLink,
   type LiteratureEntry,
   type LiteratureSearchResult,
 } from '../api/peptrack';
@@ -122,6 +140,35 @@ const cachedLiterature = ref<LiteratureEntry[]>([]);
 const cacheSearchQuery = ref('');
 const filteredCachedLiterature = ref<LiteratureEntry[]>([]);
 
+function emitSummaryPrefill(title: string, content: string) {
+  if (!content || !content.trim()) {
+    showErrorToast('No abstract available to summarize.', {
+      operation: 'prepare AI summary',
+      details: 'The selected paper does not include text content.',
+    });
+    return;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent("peptrack:prefill-summary", {
+      detail: {
+        title,
+        content,
+      },
+    }),
+  );
+
+  showSuccessToast('AI Summary Ready', 'We pre-filled the AI Summary tab with this paper.');
+}
+
+function summarizeResult(result: LiteratureSearchResult['results'][number]) {
+  emitSummaryPrefill(result.title, result.abstract_text || '');
+}
+
+function summarizeSavedEntry(entry: LiteratureEntry) {
+  emitSummaryPrefill(entry.title, entry.summary || '');
+}
+
 onMounted(() => {
   loadCachedLiterature();
 });
@@ -132,6 +179,36 @@ async function loadCachedLiterature() {
     filteredCachedLiterature.value = cachedLiterature.value;
   } catch (error: unknown) {
     showErrorToast(error, { operation: 'load saved papers' });
+  }
+}
+
+function normalizeUrl(url?: string | null): string | null {
+  if (!url) return null;
+  if (/^https?:\/\//i.test(url)) return url;
+  if (url.startsWith("doi:")) {
+    return `https://doi.org/${url.replace(/^doi:/i, "")}`;
+  }
+  if (url.startsWith("10.")) {
+    return `https://doi.org/${url}`;
+  }
+  if (url.startsWith("www.")) {
+    return `https://${url}`;
+  }
+  return url;
+}
+
+async function openLink(rawUrl?: string | null) {
+  const url = normalizeUrl(rawUrl);
+  if (!url) {
+    showErrorToast('Link not available.', { operation: 'open article' });
+    return;
+  }
+
+  try {
+    await openExternalLink(url);
+  } catch (error) {
+    console.warn('Failed to open via Tauri command, falling back:', error);
+    window.open(url, '_blank', 'noopener,noreferrer');
   }
 }
 
@@ -323,14 +400,44 @@ h2 {
   font-size: 14px;
 }
 
+.result-actions {
+  margin-top: 10px;
+}
+
+.ghost-btn {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #374151;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ghost-btn:hover {
+  background: #f3f4f6;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
 .links a {
   color: #42b983;
   text-decoration: none;
   font-weight: bold;
 }
 
-.links a:hover {
+.links a:hover,
+.link-btn:hover {
   text-decoration: underline;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: #42b983;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 0;
 }
 
 .doi {
@@ -342,6 +449,16 @@ h2 {
   margin-top: 40px;
   border-top: 2px solid #eee;
   padding-top: 20px;
+}
+
+.auto-save-note {
+  padding: 10px 12px;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: #14532d;
 }
 
 .cached-header {
@@ -426,12 +543,18 @@ h2 {
 }
 
 .view-link {
-  display: inline-block;
+  display: inline-flex;
   margin-top: 10px;
   color: #42b983;
   text-decoration: none;
   font-weight: bold;
   font-size: 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  align-items: center;
+  gap: 6px;
 }
 
 .view-link:hover {

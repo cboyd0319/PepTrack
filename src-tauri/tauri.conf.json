@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../frontend/dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "npm --prefix ../frontend run dev -- --host",
-    "beforeBuildCommand": "npm --prefix ../frontend run build"
+    "beforeDevCommand": "bash -lc 'if [ -f ../frontend/package.json ]; then npm --prefix ../frontend run dev -- --host; else npm --prefix ./frontend run dev -- --host; fi'",
+    "beforeBuildCommand": "bash -lc 'if [ -f ../frontend/package.json ]; then npm --prefix ../frontend run build; else npm --prefix ./frontend run build; fi'"
   },
   "app": {
     "windows": [

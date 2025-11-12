@@ -4,7 +4,7 @@
 //! encryption keys using the macOS Keychain Services API, providing OS-level
 //! security and access control.
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use rand::{rngs::OsRng, RngCore};
 
 #[cfg(target_os = "macos")]

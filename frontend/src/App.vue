@@ -7,10 +7,12 @@ import LiteratureSearch from "./components/LiteratureSearch.vue";
 import WelcomeScreen from "./components/WelcomeScreen.vue";
 import DoseTracker from "./components/DoseTracker.vue";
 import Settings from "./components/Settings.vue";
+import SupplierManagement from "./components/SupplierManagement.vue";
+import InventoryManagement from "./components/InventoryManagement.vue";
 import Toast from "./components/Toast.vue";
 
 // Navigation
-type View = "protocols" | "doses" | "ai" | "literature" | "settings";
+type View = "protocols" | "doses" | "ai" | "literature" | "operations" | "settings";
 const currentView = ref<View>("protocols");
 
 // Welcome screen ref
@@ -19,16 +21,14 @@ const welcomeScreen = ref<InstanceType<typeof WelcomeScreen> | null>(null);
 // Connectivity status
 const isOnline = ref(navigator.onLine);
 
-import type {
-  PeptideProtocol,
-  SummaryFormat,
-  CreateProtocolPayload,
-} from "./api/peptrack";
-import {
-  listProtocols,
-  saveProtocol,
-  summarizeContent,
-} from "./api/peptrack";
+import type { PeptideProtocol, SummaryFormat, CreateProtocolPayload } from "./api/peptrack";
+import { listProtocols, saveProtocol, summarizeContent } from "./api/peptrack";
+
+declare global {
+  interface WindowEventMap {
+    "peptrack:prefill-summary": CustomEvent<{ title?: string; content?: string }>;
+  }
+}
 
 const protocols = ref<PeptideProtocol[]>([]);
 const loadingProtocols = ref(false);
@@ -123,6 +123,22 @@ function showHelp() {
   welcomeScreen.value?.open();
 }
 
+function handleSummaryPrefill(event: Event) {
+  const detail = (event as CustomEvent<{ title?: string; content?: string }>).detail;
+  if (!detail) {
+    return;
+  }
+  summaryForm.value = {
+    ...summaryForm.value,
+    title: detail.title ?? "",
+    content: detail.content ?? "",
+  };
+  currentView.value = "ai";
+  requestAnimationFrame(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+}
+
 // Network status detection
 function updateOnlineStatus() {
   isOnline.value = navigator.onLine;
@@ -134,11 +150,13 @@ onMounted(() => {
   // Listen for connectivity changes
   window.addEventListener('online', updateOnlineStatus);
   window.addEventListener('offline', updateOnlineStatus);
+  window.addEventListener("peptrack:prefill-summary", handleSummaryPrefill as EventListener);
 });
 
 onUnmounted(() => {
   window.removeEventListener('online', updateOnlineStatus);
   window.removeEventListener('offline', updateOnlineStatus);
+  window.removeEventListener("peptrack:prefill-summary", handleSummaryPrefill as EventListener);
 });
 </script>
 
@@ -202,6 +220,13 @@ onUnmounted(() => {
         <span class="nav-label">Literature</span>
       </button>
       <button
+        @click="currentView = 'operations'"
+        :class="['nav-btn', { active: currentView === 'operations' }]"
+      >
+        <span class="nav-icon">🏢</span>
+        <span class="nav-label">Suppliers & Inventory</span>
+      </button>
+      <button
         @click="currentView = 'settings'"
         :class="['nav-btn', { active: currentView === 'settings' }]"
       >
@@ -223,7 +248,15 @@ onUnmounted(() => {
           @refresh="refreshProtocols"
         />
 
-        <ProtocolForm :form="form" :saving="savingProtocol" @submit="handleCreateProtocol" />
+        <ProtocolForm
+          :form="form"
+          :saving="savingProtocol"
+          @submit="handleCreateProtocol"
+          @update:name="form.name = $event"
+          @update:peptideName="form.peptideName = $event"
+          @update:notes="form.notes = $event"
+          @update:targetConcentration="form.targetConcentration = $event"
+        />
       </section>
     </div>
 
@@ -240,12 +273,22 @@ onUnmounted(() => {
         :summary-output="summaryOutput"
         :summary-provider="summaryProvider"
         @summarize="handleSummarize"
+        @update:title="summaryForm.title = $event"
+        @update:content="summaryForm.content = $event"
       />
     </div>
 
     <!-- Literature View -->
     <div v-if="currentView === 'literature'" class="view-content">
       <LiteratureSearch />
+    </div>
+
+    <!-- Operations View -->
+    <div v-if="currentView === 'operations'" class="view-content">
+      <section class="grid">
+        <SupplierManagement />
+        <InventoryManagement />
+      </section>
     </div>
 
     <!-- Settings View -->

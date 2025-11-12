@@ -23,6 +23,7 @@ const schedule = ref<BackupSchedule>({
   backupOnClose: false,
   compress: true,
   cleanupSettings: {
+    enabled: false,
     keepLastN: 10,
     olderThanDays: null,
   },
@@ -102,7 +103,7 @@ async function loadSchedule() {
       schedule.value.backupOnClose = false;
     }
     if (!schedule.value.cleanupSettings) {
-      schedule.value.cleanupSettings = { keepLastN: 10, olderThanDays: null };
+      schedule.value.cleanupSettings = { enabled: false, keepLastN: 10, olderThanDays: null };
     }
     if (schedule.value.maxRetries === undefined) {
       schedule.value.maxRetries = 3;
@@ -339,6 +340,16 @@ onUnmounted(() => {
         <label class="setting-label">🗑️ Old Backup Cleanup</label>
 
         <div class="cleanup-options" v-if="schedule.cleanupSettings">
+          <div class="cleanup-toggle">
+            <label class="toggle">
+              <input
+                type="checkbox"
+                v-model="schedule.cleanupSettings.enabled"
+              />
+              <span>Automatically delete older backups after each successful run</span>
+            </label>
+          </div>
+
           <label>
             Keep last N backups:
             <input
@@ -348,6 +359,7 @@ onUnmounted(() => {
               max="100"
               class="small-input"
               placeholder="Leave empty to keep all"
+              :disabled="!schedule.cleanupSettings.enabled"
             />
           </label>
 
@@ -360,11 +372,12 @@ onUnmounted(() => {
               max="365"
               class="small-input"
               placeholder="Leave empty to keep all"
+              :disabled="!schedule.cleanupSettings.enabled"
             />
           </label>
         </div>
         <p class="helper-text">
-          💡 Cleanup runs after each successful backup
+          💡 Cleanup runs after each successful backup. Leave it off if you prefer to manage files yourself.
         </p>
       </div>
 
@@ -686,6 +699,28 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.cleanup-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #2c3e50;
+  font-weight: 500;
+}
+
+.toggle input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
 }
 
 .cleanup-options label {

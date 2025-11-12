@@ -24,6 +24,7 @@ tauri = { version = "2.9.2", features = ["native-tls"] }
 tauri-plugin-log = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-dialog = "2"
+open = "5"
 peptrack-core = { path = "../crates/core" }
 peptrack-local-ai = { path = "../crates/local-ai" }
 peptrack-literature = { path = "../crates/literature" }

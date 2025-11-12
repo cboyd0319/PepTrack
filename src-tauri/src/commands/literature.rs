@@ -95,3 +95,9 @@ pub async fn search_literature(
 
     Ok(all_results)
 }
+
+/// Opens an external URL using the system default handler
+#[tauri::command]
+pub async fn open_external_url(url: String) -> Result<(), String> {
+    open::that(&url).map_err(|e| format!("Failed to open URL: {}", e))
+}

@@ -228,6 +228,10 @@ export async function uploadToDrive(filename: string, content: string) {
   return invoke<string>("upload_to_drive", { filename, content });
 }
 
+export async function openExternalLink(url: string) {
+  return invoke<void>("open_external_url", { url });
+}
+
 // Scheduled Backup types
 
 export type BackupFrequency =
@@ -239,6 +243,7 @@ export type BackupFrequency =
 export type BackupDestination = "Local" | "GoogleDrive";
 
 export interface CleanupSettings {
+  enabled: boolean;
   keepLastN?: number | null;
   olderThanDays?: number | null;
 }

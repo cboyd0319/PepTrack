@@ -19,6 +19,14 @@ vi.mock("../RestoreBackup.vue", () => ({
   default: { name: "RestoreBackup", template: "<div>Restore Backup</div>" },
 }));
 
+vi.mock("../SupplierManagement.vue", () => ({
+  default: { name: "SupplierManagement", template: "<div>Supplier Management</div>" },
+}));
+
+vi.mock("../InventoryManagement.vue", () => ({
+  default: { name: "InventoryManagement", template: "<div>Inventory Management</div>" },
+}));
+
 vi.mock("../NotificationPreferences.vue", () => ({
   default: { name: "NotificationPreferences", template: "<div>Notification Preferences</div>" },
 }));
@@ -35,6 +43,8 @@ describe("Settings", () => {
     expect(wrapper.text()).toContain("Google Drive");
     expect(wrapper.text()).toContain("Manual Backup");
     expect(wrapper.text()).toContain("Restore");
+    expect(wrapper.text()).toContain("Suppliers");
+    expect(wrapper.text()).toContain("Inventory");
     expect(wrapper.text()).toContain("Notifications");
   });
 
@@ -97,17 +107,19 @@ describe("Settings", () => {
 
   it("maintains tab state during component lifecycle", async () => {
     const wrapper = mount(Settings);
-    const tabs = wrapper.findAll(".tab-button");
+    const notificationsTab = wrapper
+      .findAll(".tab-button")
+      .find((tab) => tab.text().includes("Notifications"));
 
     // Switch to notifications tab
-    await tabs[4]?.trigger("click");
+    await notificationsTab?.trigger("click");
     await wrapper.vm.$nextTick();
 
     // Force re-render
     await wrapper.vm.$forceUpdate();
 
     // Tab should still be active
-    expect(tabs[4]?.classes()).toContain("active");
+    expect(notificationsTab?.classes()).toContain("active");
   });
 
   it("has proper accessibility attributes", () => {
@@ -130,10 +142,12 @@ describe("Settings", () => {
 
   it("handles test notification click", async () => {
     const wrapper = mount(Settings);
-    const tabs = wrapper.findAll(".tab-button");
+    const notificationsTab = wrapper
+      .findAll(".tab-button")
+      .find((tab) => tab.text().includes("Notifications"));
 
     // Navigate to notifications tab
-    await tabs[4]?.trigger("click");
+    await notificationsTab?.trigger("click");
     await wrapper.vm.$nextTick();
 
     // The NotificationPreferences component should be rendered
@@ -148,6 +162,8 @@ describe("Settings", () => {
     expect(wrapper.text()).toContain("Cloud backup setup");
     expect(wrapper.text()).toContain("Export data manually");
     expect(wrapper.text()).toContain("Restore from backup");
+    expect(wrapper.text()).toContain("Manage suppliers and vendors");
+    expect(wrapper.text()).toContain("Track peptide vials and stock");
     expect(wrapper.text()).toContain("Alert preferences");
   });
 

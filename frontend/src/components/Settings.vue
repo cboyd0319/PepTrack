@@ -8,18 +8,41 @@ import NotificationPreferences from "./NotificationPreferences.vue";
 import SupplierManagement from "./SupplierManagement.vue";
 import InventoryManagement from "./InventoryManagement.vue";
 
-type Tab = "scheduled" | "drive" | "backup" | "restore" | "notifications" | "suppliers" | "inventory";
+type Tab =
+  | "scheduled"
+  | "drive"
+  | "backup"
+  | "restore"
+  | "notifications"
+  | "suppliers"
+  | "inventory";
+
+interface TabConfig {
+  id: Tab;
+  label: string;
+  description: string;
+}
 
 const activeTab = ref<Tab>("scheduled");
 
-const tabs = [
-  { id: "scheduled" as Tab, label: "⏰ Scheduled Backups", description: "Automatic backup scheduling" },
-  { id: "drive" as Tab, label: "☁️ Google Drive", description: "Cloud backup setup" },
-  { id: "backup" as Tab, label: "💾 Manual Backup", description: "Export data manually" },
-  { id: "restore" as Tab, label: "📥 Restore", description: "Restore from backup" },
-  { id: "suppliers" as Tab, label: "🏢 Suppliers", description: "Manage suppliers and vendors" },
-  { id: "inventory" as Tab, label: "📦 Inventory", description: "Track peptide vials and stock" },
-  { id: "notifications" as Tab, label: "🔔 Notifications", description: "Alert preferences" },
+const tabGroups: Array<{ label: string; tabs: TabConfig[] }> = [
+  {
+    label: "Backup & Restore",
+    tabs: [
+      { id: "scheduled", label: "⏰ Scheduled Backups", description: "Automatic backup scheduling" },
+      { id: "drive", label: "☁️ Google Drive", description: "Cloud backup setup" },
+      { id: "backup", label: "💾 Manual Backup", description: "Export data manually" },
+      { id: "restore", label: "📥 Restore", description: "Restore from backup" },
+    ],
+  },
+  {
+    label: "Operations & Alerts",
+    tabs: [
+      { id: "suppliers", label: "🏢 Suppliers", description: "Manage suppliers and vendors" },
+      { id: "inventory", label: "📦 Inventory", description: "Track peptide vials and stock" },
+      { id: "notifications", label: "🔔 Notifications", description: "Alert preferences" },
+    ],
+  },
 ];
 
 function setActiveTab(tab: Tab) {
@@ -65,18 +88,27 @@ function handleTestNotification() {
     <div class="tabs-container">
       <div class="tabs-scroll-wrapper">
         <div class="tabs">
-          <button
-            v-for="tab in tabs"
-            :key="tab.id"
-            @click="setActiveTab(tab.id)"
-            :class="['tab-button', { active: activeTab === tab.id }]"
+          <div
+            v-for="group in tabGroups"
+            :key="group.label"
+            class="tab-group"
           >
-            <span class="tab-icon">{{ tab.label.split(' ')[0] }}</span>
-            <div class="tab-info">
-              <div class="tab-label">{{ tab.label.substring(tab.label.indexOf(' ') + 1) }}</div>
-              <div class="tab-desc">{{ tab.description }}</div>
+            <p class="tab-group-label">{{ group.label }}</p>
+            <div class="tab-group-buttons">
+              <button
+                v-for="tab in group.tabs"
+                :key="tab.id"
+                @click="setActiveTab(tab.id)"
+                :class="['tab-button', { active: activeTab === tab.id }]"
+              >
+                <span class="tab-icon">{{ tab.label.split(' ')[0] }}</span>
+                <div class="tab-info">
+                  <div class="tab-label">{{ tab.label.substring(tab.label.indexOf(' ') + 1) }}</div>
+                  <div class="tab-desc">{{ tab.description }}</div>
+                </div>
+              </button>
             </div>
-          </button>
+          </div>
         </div>
       </div>
 
@@ -156,9 +188,30 @@ function handleTestNotification() {
 
 .tabs {
   display: flex;
+  flex-direction: column;
   min-width: min-content;
   padding: 12px;
+  gap: 16px;
+}
+
+.tab-group {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+}
+
+.tab-group-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #6b7280;
+  letter-spacing: 0.05em;
+}
+
+.tab-group-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .tab-button {
