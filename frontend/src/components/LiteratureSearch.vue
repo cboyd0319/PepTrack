@@ -105,6 +105,32 @@
         autocomplete="off"
       />
 
+      <!-- Filters and Export -->
+      <div v-if="cachedLiterature.length > 0" class="filters-export-bar">
+        <div class="filters">
+          <select v-model="sourceFilter" class="filter-select">
+            <option value="all">All Sources</option>
+            <option value="pubmed">Medical Database</option>
+            <option value="openalex">Research Library</option>
+          </select>
+
+          <select v-model="sortBy" class="filter-select">
+            <option value="date-desc">Newest First</option>
+            <option value="date-asc">Oldest First</option>
+            <option value="title-asc">Title (A-Z)</option>
+          </select>
+        </div>
+
+        <div class="export-buttons">
+          <button @click="exportBibTeX" class="export-btn" title="Export as BibTeX">
+            📄 BibTeX
+          </button>
+          <button @click="exportCSV" class="export-btn" title="Export as CSV">
+            📊 CSV
+          </button>
+        </div>
+      </div>
+
       <div v-if="filteredCachedLiterature.length === 0" class="no-results">
         No saved papers yet. Search for papers above and they'll be saved here automatically!
       </div>
@@ -198,7 +224,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { showErrorToast, showSuccessToast } from '../utils/errorHandling';
 import {
   listLiterature,
@@ -223,6 +249,10 @@ const maxResults = 10;
 const cachedLiterature = ref<LiteratureEntry[]>([]);
 const cacheSearchQuery = ref('');
 const filteredCachedLiterature = ref<LiteratureEntry[]>([]);
+
+// Filter and sort state
+const sourceFilter = ref('all');
+const sortBy = ref('date-desc');
 
 // Risk Matrix state
 interface SelectedPaper {
@@ -271,6 +301,11 @@ function summarizeSavedEntry(entry: LiteratureEntry) {
 
 onMounted(() => {
   loadCachedLiterature();
+});
+
+// Watch for filter changes
+watch([sourceFilter, sortBy], () => {
+  handleCacheSearch();
 });
 
 async function loadCachedLiterature() {
@@ -340,16 +375,46 @@ async function handleSearch() {
 }
 
 async function handleCacheSearch() {
+  let results: LiteratureEntry[];
+
   if (!cacheSearchQuery.value.trim()) {
-    filteredCachedLiterature.value = cachedLiterature.value;
-    return;
+    results = cachedLiterature.value;
+  } else {
+    try {
+      results = await searchCachedLiterature(cacheSearchQuery.value);
+    } catch (error: unknown) {
+      showErrorToast(error, { operation: 'search cached literature' });
+      return;
+    }
   }
 
-  try {
-    filteredCachedLiterature.value = await searchCachedLiterature(cacheSearchQuery.value);
-  } catch (error: unknown) {
-    showErrorToast(error, { operation: 'search cached literature' });
+  // Apply source filter
+  if (sourceFilter.value !== 'all') {
+    results = results.filter(entry => entry.source === sourceFilter.value);
   }
+
+  // Apply sorting
+  results = applySorting(results);
+
+  filteredCachedLiterature.value = results;
+}
+
+function applySorting(papers: LiteratureEntry[]): LiteratureEntry[] {
+  const sorted = [...papers];
+
+  switch (sortBy.value) {
+    case 'date-desc':
+      sorted.sort((a, b) => new Date(b.indexed_at).getTime() - new Date(a.indexed_at).getTime());
+      break;
+    case 'date-asc':
+      sorted.sort((a, b) => new Date(a.indexed_at).getTime() - new Date(b.indexed_at).getTime());
+      break;
+    case 'title-asc':
+      sorted.sort((a, b) => a.title.localeCompare(b.title));
+      break;
+  }
+
+  return sorted;
 }
 
 function formatDate(dateStr: string): string {
@@ -527,6 +592,53 @@ function parseRiskAnalysis(analysis: string) {
 
 function closeRiskMatrix() {
   showRiskMatrix.value = false;
+}
+
+// Export Functions
+function exportBibTeX() {
+  const entries = filteredCachedLiterature.value.map(entry => {
+    const key = entry.title.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 20);
+    const year = new Date(entry.indexed_at).getFullYear();
+
+    return `@article{${key}${year},
+  title = {${entry.title}},
+  author = {Unknown},
+  journal = {${entry.source}},
+  year = {${year}},
+  url = {${entry.url || 'N/A'}},
+  abstract = {${(entry.summary || '').replace(/\n/g, ' ')}}
+}`;
+  }).join('\n\n');
+
+  downloadFile(entries, 'literature.bib', 'application/x-bibtex');
+  showSuccessToast('Export Complete', `${filteredCachedLiterature.value.length} papers exported as BibTeX`);
+}
+
+function exportCSV() {
+  const headers = ['Title', 'Source', 'URL', 'Saved Date', 'Summary'];
+  const rows = filteredCachedLiterature.value.map(entry => [
+    `"${(entry.title || '').replace(/"/g, '""')}"`,
+    `"${getSourceName(entry.source)}"`,
+    `"${entry.url || ''}"`,
+    `"${formatDate(entry.indexed_at)}"`,
+    `"${(entry.summary || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`,
+  ]);
+
+  const csv = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+  downloadFile(csv, 'literature.csv', 'text/csv');
+  showSuccessToast('Export Complete', `${filteredCachedLiterature.value.length} papers exported as CSV`);
+}
+
+function downloadFile(content: string, filename: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 </script>
 
@@ -1123,6 +1235,90 @@ h2 {
 
   .risk-matrix-modal {
     max-height: 95vh;
+  }
+}
+
+/* Filter and Export Styles */
+.filters-export-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  margin: 16px 0;
+}
+
+.filters {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+}
+
+.filter-select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  background-color: white;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.filter-select:hover {
+  border-color: #42b983;
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: #42b983;
+  box-shadow: 0 0 0 3px rgba(66, 185, 131, 0.1);
+}
+
+.export-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.export-btn {
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #42b983, #36a371);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.export-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(66, 185, 131, 0.3);
+}
+
+@media (max-width: 768px) {
+  .filters-export-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filters {
+    flex-direction: column;
+  }
+
+  .export-buttons {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .export-btn {
+    flex: 1;
+    justify-content: center;
   }
 }
 </style>
