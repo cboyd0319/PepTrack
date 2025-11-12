@@ -4,6 +4,7 @@ import Dashboard from "./components/Dashboard.vue";
 import AlertsDashboard from "./components/AlertsDashboard.vue";
 import ProtocolList from "./components/ProtocolList.vue";
 import ProtocolForm from "./components/ProtocolForm.vue";
+import ProtocolRecommender from "./components/ProtocolRecommender.vue";
 import Research from "./components/Research.vue";
 import WelcomeScreen from "./components/WelcomeScreen.vue";
 import DoseTracker from "./components/DoseTracker.vue";
@@ -13,7 +14,7 @@ import InventoryManagement from "./components/InventoryManagement.vue";
 import Toast from "./components/Toast.vue";
 
 // Navigation
-type View = "dashboard" | "doses" | "protocols" | "research" | "operations" | "settings" | "alerts";
+type View = "dashboard" | "doses" | "protocols" | "ai-assistant" | "research" | "operations" | "settings" | "alerts";
 const currentView = ref<View>("dashboard");
 
 // Welcome screen ref
@@ -182,6 +183,14 @@ onUnmounted(() => {
         <span class="nav-label">Protocols</span>
       </button>
       <button
+        @click="currentView = 'ai-assistant'"
+        :class="['nav-btn', { active: currentView === 'ai-assistant' }]"
+        title="AI-powered protocol recommendations"
+      >
+        <span class="nav-icon">🤖</span>
+        <span class="nav-label">AI Assistant</span>
+      </button>
+      <button
         @click="currentView = 'research'"
         :class="['nav-btn', { active: currentView === 'research' }]"
         title="Literature search and AI summaries"
@@ -255,6 +264,11 @@ onUnmounted(() => {
           @update:targetConcentration="form.targetConcentration = $event"
         />
       </section>
+    </div>
+
+    <!-- AI Assistant View -->
+    <div v-if="currentView === 'ai-assistant'" class="view-content full-height">
+      <ProtocolRecommender />
     </div>
 
     <!-- Research View (NEW - combines AI + Literature) -->
