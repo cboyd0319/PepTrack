@@ -117,9 +117,53 @@ pub async fn preview_backup(
 
 // Helper functions
 
+fn validate_backup_path(file_path: &str) -> Result<std::path::PathBuf> {
+    use std::path::Path;
+
+    let path = Path::new(file_path);
+
+    // Resolve to canonical path to prevent path traversal
+    let canonical = path.canonicalize()
+        .context("Invalid file path or file does not exist")?;
+
+    // Only allow reading from user directories (Documents, Downloads, Desktop, Home)
+    let allowed_dirs = vec![
+        dirs::download_dir(),
+        dirs::document_dir(),
+        dirs::desktop_dir(),
+        dirs::home_dir(),
+    ];
+
+    let is_allowed = allowed_dirs.into_iter()
+        .flatten()
+        .any(|allowed| canonical.starts_with(&allowed));
+
+    if !is_allowed {
+        return Err(anyhow::anyhow!(
+            "File must be in your Downloads, Documents, Desktop, or Home folder for security"
+        ));
+    }
+
+    // Must have a valid extension
+    let extension = canonical.extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+
+    if extension != "json" && extension != "gz" {
+        return Err(anyhow::anyhow!(
+            "Invalid file type - backup files must be .json or .json.gz"
+        ));
+    }
+
+    Ok(canonical)
+}
+
 fn read_backup_file(file_path: &str, password: Option<&str>) -> Result<BackupData> {
+    // Validate path to prevent arbitrary file reads
+    let validated_path = validate_backup_path(file_path)?;
+
     let data =
-        std::fs::read(file_path).with_context(|| format!("Failed to read file: {}", file_path))?;
+        std::fs::read(&validated_path).with_context(|| format!("Failed to read file: {}", validated_path.display()))?;
 
     // Try to detect if compressed
     let is_gzipped = file_path.ends_with(".gz") || is_gzip_data(&data);

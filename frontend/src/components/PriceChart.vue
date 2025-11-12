@@ -245,7 +245,7 @@ const colors = [
 
 function getColorForPeptide(peptideName: string): string {
   const index = peptideNames.value.indexOf(peptideName);
-  return colors[index % colors.length] ?? '#3498db';
+  return colors[index % colors.length] || '#3498db';
 }
 
 function getLatestPrice(peptideData: PriceHistory[]): number {

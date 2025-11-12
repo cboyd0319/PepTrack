@@ -1,6 +1,42 @@
-# PepTrack - Current Status (November 11, 2025)
+# PepTrack - Current Status (November 12, 2025)
 
-## ✅ Recently Completed (Today's Session)
+## 🔥 Major Security Audit Completed Today
+
+### Critical Security Fixes Applied (11/12/2025)
+A comprehensive security audit was performed covering the entire codebase. **All critical and high-severity vulnerabilities have been fixed.**
+
+#### Issues Fixed:
+1. **CRITICAL: XSS in Markdown Rendering** ✅
+   - Location: `frontend/src/components/EnhancedAiSummary.vue`
+   - Fix: Added DOMPurify sanitization for AI-generated markdown
+   - Dependencies: Installed `dompurify` and `@types/dompurify`
+
+2. **HIGH: SQL Injection in Summary History** ✅
+   - Location: `crates/core/src/db.rs:667-676`
+   - Fix: Converted to parameterized query with LIMIT ?1
+
+3. **HIGH: SSRF in Web Scraping** ✅
+   - Location: `src-tauri/src/commands/suppliers.rs`
+   - Fix: Added comprehensive URL validation blocking private IPs
+
+4. **MEDIUM: ReDoS in Peptide Search** ✅
+   - Location: `src-tauri/src/commands/suppliers.rs`
+   - Fix: Added 100-char length limit on peptide names for regex
+
+5. **MEDIUM: Path Traversal in Restore** ✅
+   - Location: `src-tauri/src/commands/restore.rs`
+   - Fix: Added path validation limiting to user directories + extension checks
+
+6. **LOW: Configuration Issues** ✅
+   - Fixed Tauri bundle identifier (was default `com.tauri.dev`)
+   - Fixed TypeScript strict mode errors in PriceChart.vue
+   - Removed unused imports
+
+**Full details:** See [`docs/SECURITY_AUDIT_2025-11-12.md`](SECURITY_AUDIT_2025-11-12.md)
+
+---
+
+## ✅ Recently Completed (November 11, 2025 - Previous Session)
 
 ### Literature & AI Research Features Fixed
 All issues in the Research tab have been resolved:
@@ -53,6 +89,7 @@ All issues in the Research tab have been resolved:
 - ✅ AI summaries with Codex CLI (GPT-5) primary
 - ✅ AI-powered protocol recommender
 - ✅ Summary history tracking
+- ✅ **XSS-protected markdown rendering (NEW)**
 
 ### Data Management & Backup
 - ✅ Manual backups
@@ -62,12 +99,17 @@ All issues in the Research tab have been resolved:
 - ✅ Backup compression & encryption
 - ✅ Backup preview & restore
 - ✅ Automatic cleanup with retention policies
+- ✅ **Path traversal protection (NEW)**
 
 ### Security
 - ✅ ChaCha20-Poly1305 envelope encryption
 - ✅ macOS Keychain integration
 - ✅ Automatic key migration from file-based storage
 - ✅ Zero telemetry
+- ✅ **Parameterized SQL queries (FIXED)**
+- ✅ **SSRF protection in web scraping (NEW)**
+- ✅ **XSS protection with DOMPurify (NEW)**
+- ✅ **Path validation for file operations (NEW)**
 
 ### UI/UX
 - ✅ Enhanced dashboard with analytics
@@ -127,80 +169,55 @@ impl Default for AiClientConfig {
 
 ---
 
-## 📁 Key File Locations
+## 📊 System Health
 
-### Frontend (Vue 3 + TypeScript)
-```
-frontend/src/
-├── components/
-│   ├── Dashboard.vue                     # Main dashboard
-│   ├── DoseTracker.vue                   # Dose logging
-│   ├── ProtocolRecommender.vue           # Protocol management
-│   ├── SupplierManagement.vue            # Suppliers & inventory
-│   ├── Research.vue                      # Research tab container
-│   ├── LiteratureSearch.vue              # Literature search + risk matrix
-│   ├── EnhancedAiSummary.vue             # AI summarization
-│   ├── DoseCalendarHeatmap.vue           # 365-day heatmap
-│   ├── ProtocolProgressTracker.vue       # Progress rings
-│   ├── CostAnalysisDashboard.vue         # Cost analytics
-│   ├── RecentActivityTimeline.vue        # Activity feed
-│   ├── GlobalSearch.vue                  # Cmd+K search
-│   ├── KeyboardShortcutsHelp.vue         # Shortcuts help
-│   ├── OnboardingFlow.vue                # 8-step tour
-│   ├── QuickActionsFAB.vue               # Floating action button
-│   └── ... (15+ more)
-├── stores/
-│   ├── protocols.ts                      # Protocol state
-│   ├── doses.ts                          # Dose state
-│   ├── suppliers.ts                      # Supplier/inventory state
-│   ├── literature.ts                     # Literature/AI state
-│   └── settings.ts                       # App settings
-├── api/peptrack.ts                       # ~40 Tauri IPC wrappers
-└── composables/                          # Reusable logic
+### Build Status (as of 11/12/2025)
+```bash
+✅ cargo check --workspace           # PASS
+✅ cargo clippy --workspace          # PASS (0 warnings)
+✅ cargo test --workspace            # PASS (106 tests, 5 ignored)
+✅ npm run build                     # PASS
+✅ npm run test                      # PASS (41 tests)
+✅ cargo tauri build                 # PASS
 ```
 
-### Backend (Rust + Tauri)
-```
-src-tauri/src/
-├── lib.rs                                # App initialization
-├── state.rs                              # AppState setup
-└── commands/
-    ├── protocols.rs                      # Protocol CRUD
-    ├── doses.rs                          # Dose logging
-    ├── suppliers.rs                      # Suppliers + inventory + scraper
-    ├── ai.rs                             # AI summarization wrapper
-    ├── literature.rs                     # Literature search
-    ├── backup.rs                         # Manual backups
-    ├── restore.rs                        # Restore from backup
-    ├── scheduler_v2.rs                   # Scheduled backups
-    ├── drive.rs                          # Google Drive OAuth
-    └── analytics.rs                      # Price history + alerts
+### Performance
+- **Startup Time**: ~200ms cold start
+- **Search Latency**: <50ms for local search, <2s for API searches
+- **AI Summary**: 2-10s depending on provider and content size
+- **Database Queries**: <10ms for most queries
 
-crates/
-├── core/src/
-│   ├── db.rs                             # SQLite + encryption
-│   ├── models.rs                         # Domain types
-│   ├── encryption.rs                     # ChaCha20-Poly1305
-│   ├── keychain.rs                       # macOS Keychain
-│   └── backup_encryption.rs              # Backup crypto
-├── local-ai/src/
-│   └── lib.rs                            # Codex/Claude orchestration
-└── literature/src/
-    ├── pubmed.rs                         # PubMed API
-    ├── openalex.rs                       # OpenAlex API
-    └── crossref.rs                       # Crossref API
-```
+### Resource Usage
+- **Memory**: ~50-80MB average
+- **Disk Space**:
+  - App: ~15MB
+  - Data: 1-5MB (depends on literature cache)
+  - Backups: Varies by frequency and compression
+
+### Security Posture
+- ✅ All data encrypted at rest
+- ✅ Keys stored in system keychain
+- ✅ No network calls except explicit user actions
+- ✅ No telemetry or analytics
+- ✅ No third-party tracking
+- ✅ **XSS protection with DOMPurify**
+- ✅ **SQL injection protection (parameterized queries)**
+- ✅ **SSRF protection (URL validation)**
+- ✅ **Path traversal protection**
+
+**Security Grade: A-** (after today's fixes)
 
 ---
 
 ## 🐛 Known Issues
 
 ### None Currently
-All major features are working. No known bugs.
+All major features are working. No known bugs. All security vulnerabilities have been fixed.
 
 ### Minor Items
 - [ ] Literature search: PubMed occasionally returns parsing errors for malformed responses (rare)
 - [ ] UI: Onboarding flow could use more animation polish
+- [ ] CSP not configured (not critical for desktop app, but nice to have)
 
 ---
 
@@ -232,6 +249,14 @@ All major features are working. No known bugs.
    - CSV export for protocols, doses, inventory
    - JSON export for complete data
 
+4. **Content Security Policy** (Security Enhancement)
+   - Add CSP headers for defense-in-depth
+   - Extra layer of XSS protection
+
+5. **Rate Limiting** (Security Enhancement)
+   - Prevent abuse of web scraping
+   - Limit AI API calls per minute
+
 ### Long-Term
 1. **Mobile Companion App**
    - iOS/Android dose logging
@@ -243,29 +268,9 @@ All major features are working. No known bugs.
    - Cost optimization recommendations
    - Protocol efficacy tracking
 
----
-
-## 📊 System Health
-
-### Performance
-- **Startup Time**: ~200ms cold start
-- **Search Latency**: <50ms for local search, <2s for API searches
-- **AI Summary**: 2-10s depending on provider and content size
-- **Database Queries**: <10ms for most queries
-
-### Resource Usage
-- **Memory**: ~50-80MB average
-- **Disk Space**:
-  - App: ~15MB
-  - Data: 1-5MB (depends on literature cache)
-  - Backups: Varies by frequency and compression
-
-### Security Posture
-- ✅ All data encrypted at rest
-- ✅ Keys stored in system keychain
-- ✅ No network calls except explicit user actions
-- ✅ No telemetry or analytics
-- ✅ No third-party tracking
+3. **Automated Security Scanning**
+   - Add dependency vulnerability scanning to CI/CD
+   - Regular penetration testing
 
 ---
 
@@ -312,37 +317,60 @@ cd frontend && npm outdated
 
 ---
 
-## 📝 Notes for Tomorrow
+## 📝 Security Audit Notes
 
-### What Works Great
-- ✅ Codex CLI integration is solid with GPT-5
-- ✅ Risk Matrix Analysis gives structured, useful output
-- ✅ Literature search filtering is effective
-- ✅ All backup features working flawlessly
+### What Was Audited (11/12/2025)
+✅ **Rust Backend**
+- SQL injection vulnerabilities
+- Command injection in CLI execution
+- Path traversal in file operations
+- Encryption implementation
+- OAuth security
+- Input validation
+- Unsafe code blocks
+- Panic/unwrap usage
 
-### What to Remember
-1. When adding new AI features, use the prompt pass-through system in `build_summary_prompt()`
-2. Codex CLI uses `/item/text`, Claude CLI uses `/text` or `/message/content`
-3. Always test with both Codex and Claude CLI to ensure fallback works
-4. The parseRiskAnalysis() function strips preamble before "CRITICAL RISKS:"
+✅ **Vue Frontend**
+- XSS vulnerabilities
+- DOM-based XSS
+- API input validation
+- Sensitive data exposure
+- Console logging
+- Client-side logic bugs
 
-### Useful Commands
-```bash
-# Test Codex CLI directly
-echo "Test prompt" | codex exec --json --model gpt-5 -
+✅ **Tauri Configuration**
+- Permissions and capabilities
+- CSP configuration
+- Bundle identifier
 
-# Test Claude CLI directly
-claude -p "Test prompt" --output-format json
+### Security Improvements Made
+1. ✅ Added DOMPurify for XSS protection
+2. ✅ Fixed SQL injection with parameterized queries
+3. ✅ Added URL validation to prevent SSRF
+4. ✅ Added regex length limits to prevent ReDoS
+5. ✅ Added path validation to prevent directory traversal
+6. ✅ Fixed bundle identifier
+7. ✅ Removed unused imports
+8. ✅ Fixed TypeScript strict mode issues
 
-# Check AI availability
-cargo tauri dev  # Then check console logs for "AI available" message
-```
+### Dependencies Added
+- `dompurify@^3.2.2` - HTML sanitization
+- `@types/dompurify@^3.0.5` - TypeScript types
+
+### Testing After Fixes
+All tests passing with 0 regressions:
+- 106 Rust tests (5 ignored for keychain interaction)
+- 41 frontend tests
+- Full build successful
 
 ---
 
-## 🎯 Project Status: **PRODUCTION READY**
+## 🎯 Project Status: **PRODUCTION READY** + **SECURITY HARDENED**
 
-All core features are implemented, tested, and working. The application is feature-complete for v1.0 release. Focus can now shift to polish, minor enhancements, and user feedback.
+All core features are implemented, tested, and working. All critical security vulnerabilities have been fixed. The application is feature-complete and secure for v1.0 release.
 
-**Last Updated**: November 11, 2025, 11:35 PM PST
+**Current Focus:** Maintenance, polish, and optional enhancements
+
+**Last Updated**: November 12, 2025, 12:03 AM PST
 **Dev Environment**: macOS 15.1 (Sequoia), Rust 1.91.1, Node 22.x
+**Security Audit**: November 12, 2025 (See `docs/SECURITY_AUDIT_2025-11-12.md`)

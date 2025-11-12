@@ -667,15 +667,12 @@ impl StorageManager {
     pub fn list_summary_history(&self, limit: Option<usize>) -> Result<Vec<SummaryHistory>> {
         let conn = self.open_connection()?;
 
-        let query = if let Some(lim) = limit {
-            format!("SELECT payload FROM summary_history ORDER BY created_at DESC LIMIT {}", lim)
-        } else {
-            "SELECT payload FROM summary_history ORDER BY created_at DESC".into()
-        };
+        // Use parameterized query with LIMIT -1 for no limit (SQLite behavior)
+        let limit_value = limit.map(|l| l as i64).unwrap_or(-1);
 
-        let mut stmt = conn.prepare(&query)?;
+        let mut stmt = conn.prepare("SELECT payload FROM summary_history ORDER BY created_at DESC LIMIT ?1")?;
         let mut rows = stmt
-            .query([])
+            .query([limit_value])
             .context("Unable to query summary history")?;
 
         let mut summaries = Vec::new();

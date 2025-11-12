@@ -95,6 +95,52 @@ pub async fn delete_supplier(
     })
 }
 
+/// Validate URL to prevent SSRF attacks
+fn validate_scraping_url(url_str: &str) -> Result<url::Url, String> {
+    let url = url::Url::parse(url_str)
+        .map_err(|_| "Invalid URL format".to_string())?;
+
+    // Only allow HTTP/HTTPS
+    if url.scheme() != "http" && url.scheme() != "https" {
+        return Err("Only HTTP and HTTPS URLs are allowed".to_string());
+    }
+
+    // Block localhost and private IP ranges to prevent SSRF
+    if let Some(host) = url.host_str() {
+        let host_lower = host.to_lowercase();
+
+        if host_lower == "localhost"
+            || host_lower == "127.0.0.1"
+            || host_lower.starts_with("192.168.")
+            || host_lower.starts_with("10.")
+            || host_lower.starts_with("172.16.")
+            || host_lower.starts_with("172.17.")
+            || host_lower.starts_with("172.18.")
+            || host_lower.starts_with("172.19.")
+            || host_lower.starts_with("172.20.")
+            || host_lower.starts_with("172.21.")
+            || host_lower.starts_with("172.22.")
+            || host_lower.starts_with("172.23.")
+            || host_lower.starts_with("172.24.")
+            || host_lower.starts_with("172.25.")
+            || host_lower.starts_with("172.26.")
+            || host_lower.starts_with("172.27.")
+            || host_lower.starts_with("172.28.")
+            || host_lower.starts_with("172.29.")
+            || host_lower.starts_with("172.30.")
+            || host_lower.starts_with("172.31.")
+            || host_lower == "169.254.169.254"  // AWS/Cloud metadata
+            || host_lower.starts_with("[::1]")   // IPv6 localhost
+            || host_lower.starts_with("fe80:")   // IPv6 link-local
+            || host_lower.starts_with("fc00:")   // IPv6 unique local
+        {
+            return Err("Access to private/internal addresses is not allowed for security reasons".to_string());
+        }
+    }
+
+    Ok(url)
+}
+
 /// Scrape a website for peptide prices
 #[tauri::command]
 pub async fn scrape_supplier_website(
@@ -103,8 +149,11 @@ pub async fn scrape_supplier_website(
 ) -> Result<Vec<PriceMatch>, String> {
     info!("Scraping URL: {} for peptide: {:?}", url, peptide_name);
 
+    // Validate URL to prevent SSRF attacks
+    let validated_url = validate_scraping_url(&url)?;
+
     // Fetch the webpage
-    let response = reqwest::get(&url).await.map_err(|e| {
+    let response = reqwest::get(validated_url).await.map_err(|e| {
         error!("Failed to fetch URL: {:#}", e);
         format!("Failed to fetch webpage: {}", e)
     })?;
@@ -150,6 +199,12 @@ pub async fn scrape_supplier_website(
 
     // Pattern 3: Generic price mentions near peptide names
     if let Some(ref peptide) = peptide_name {
+        // Prevent ReDoS by limiting peptide name length
+        if peptide.len() > 100 {
+            warn!("Peptide name too long for regex search: {} chars", peptide.len());
+            return Ok(matches);
+        }
+
         let peptide_pattern = format!(r"(?i){}\s*(?:\w+\s*){{0,10}}\$(\d+(?:\.\d{{1,2}})?)", regex::escape(peptide));
         if let Ok(peptide_re) = Regex::new(&peptide_pattern) {
             for cap in peptide_re.captures_iter(&html) {

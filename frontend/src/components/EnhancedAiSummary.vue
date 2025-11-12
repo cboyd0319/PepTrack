@@ -150,6 +150,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import type { SummaryFormat, SummaryHistory } from '../api/peptrack';
 import { listSummaryHistory, deleteSummaryFromHistory, saveSummary } from '../api/peptrack';
 import { showSuccessToast, showErrorToast } from '../utils/errorHandling';
@@ -199,7 +200,14 @@ watch(() => formData.value.format, (val) => emit('update:format', val as Summary
 
 const renderedMarkdown = computed(() => {
   if (!props.summaryOutput || formData.value.format !== 'Markdown') return '';
-  return marked.parse(props.summaryOutput);
+  // marked.parse can return string or Promise<string>, ensure we have a string
+  const rawHtml = marked.parse(props.summaryOutput) as string;
+  // Sanitize HTML to prevent XSS attacks from AI-generated content
+  return DOMPurify.sanitize(rawHtml, {
+    ALLOWED_TAGS: ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'strong', 'em', 'code', 'pre', 'blockquote', 'a', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
+    ALLOWED_ATTR: ['href', 'title', 'target', 'rel'],
+    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):)/i // Only allow https, http, and mailto
+  });
 });
 
 function updateCharCount() {
