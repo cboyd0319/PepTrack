@@ -681,7 +681,9 @@ setInterval(() => {
 
   .alert-actions {
     flex-direction: row;
+    flex-wrap: wrap;
     justify-content: flex-end;
+    gap: 8px;
   }
 }
 </style>

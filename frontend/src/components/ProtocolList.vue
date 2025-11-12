@@ -28,10 +28,10 @@ async function handleLoadDefaults() {
   try {
     const count = await populateDefaultPeptides();
     if (count > 0) {
-      showSuccessToast(`Added ${count} popular peptide${count !== 1 ? 's' : ''} to your protocols!`);
+      showSuccessToast('Peptides Added', `Added ${count} popular peptide${count !== 1 ? 's' : ''} to your protocols!`);
       emit("refresh");
     } else {
-      showSuccessToast("All popular peptides are already in your protocols!");
+      showSuccessToast('Already Populated', 'All popular peptides are already in your protocols!');
     }
   } catch (error) {
     showErrorToast(error, { operation: 'load default peptides' });

@@ -286,17 +286,18 @@ async function handleSubmit() {
   loading.value = true;
   try {
     if (editingSchedule.value) {
-      // Update existing schedule
+      // Update existing schedule - send all fields
       const payload: UpdateSchedulePayload = {
         id: editingSchedule.value.id,
         amountMg: form.value.amountMg,
         site: form.value.site || undefined,
         timeOfDay: form.value.timeOfDay,
         daysOfWeek: form.value.daysOfWeek,
+        enabled: editingSchedule.value.enabled, // Preserve enabled state
         notes: form.value.notes || undefined,
       };
       await updateDoseSchedule(payload);
-      showSuccessToast('Schedule updated successfully');
+      showSuccessToast('Schedule Updated', 'Your dose schedule has been updated successfully');
     } else {
       // Create new schedule
       const payload: CreateSchedulePayload = {
@@ -308,7 +309,7 @@ async function handleSubmit() {
         notes: form.value.notes || undefined,
       };
       await createDoseSchedule(payload);
-      showSuccessToast('Schedule created successfully');
+      showSuccessToast('Schedule Created', 'Your dose schedule has been created successfully');
     }
 
     resetForm();
@@ -327,7 +328,7 @@ async function toggleSchedule(schedule: DoseSchedule) {
       id: schedule.id,
       enabled: !schedule.enabled,
     });
-    showSuccessToast(`Schedule ${!schedule.enabled ? 'enabled' : 'disabled'}`);
+    showSuccessToast('Schedule Updated', `Schedule ${!schedule.enabled ? 'enabled' : 'disabled'}`);
     await loadSchedules();
   } catch (error) {
     showErrorToast(error, { operation: 'toggle schedule' });
@@ -369,7 +370,7 @@ async function handleDelete() {
   loading.value = true;
   try {
     await deleteDoseSchedule(deletingSchedule.value.id);
-    showSuccessToast('Schedule deleted successfully');
+    showSuccessToast('Schedule Deleted', 'The schedule was deleted successfully');
     deletingSchedule.value = null;
     await loadSchedules();
   } catch (error) {
@@ -392,7 +393,14 @@ function resetForm() {
 }
 
 function formatTime(time: string): string {
-  const [hours, minutes] = time.split(':').map(Number);
+  const parts = time.split(':');
+  const hours = Number(parts[0]);
+  const minutes = Number(parts[1]);
+
+  if (isNaN(hours) || isNaN(minutes)) {
+    return time; // Return original if parsing fails
+  }
+
   const period = hours >= 12 ? 'PM' : 'AM';
   const displayHours = hours % 12 || 12;
   return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;

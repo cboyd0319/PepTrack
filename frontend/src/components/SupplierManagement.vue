@@ -1075,10 +1075,11 @@ textarea:focus {
 .modal-content {
   background: white;
   border-radius: 12px;
-  max-width: 800px;
+  max-width: min(800px, 90vw);
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
+  overflow-x: hidden;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
 }
 
