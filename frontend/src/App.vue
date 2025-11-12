@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
+import Dashboard from "./components/Dashboard.vue";
 import ProtocolList from "./components/ProtocolList.vue";
 import ProtocolForm from "./components/ProtocolForm.vue";
-import AiSummaryPanel from "./components/AiSummaryPanel.vue";
-import LiteratureSearch from "./components/LiteratureSearch.vue";
+import Research from "./components/Research.vue";
 import WelcomeScreen from "./components/WelcomeScreen.vue";
 import DoseTracker from "./components/DoseTracker.vue";
 import Settings from "./components/Settings.vue";
@@ -12,8 +12,8 @@ import InventoryManagement from "./components/InventoryManagement.vue";
 import Toast from "./components/Toast.vue";
 
 // Navigation
-type View = "protocols" | "doses" | "ai" | "literature" | "operations" | "settings";
-const currentView = ref<View>("protocols");
+type View = "dashboard" | "doses" | "protocols" | "research" | "operations" | "settings";
+const currentView = ref<View>("dashboard");
 
 // Welcome screen ref
 const welcomeScreen = ref<InstanceType<typeof WelcomeScreen> | null>(null);
@@ -21,21 +21,12 @@ const welcomeScreen = ref<InstanceType<typeof WelcomeScreen> | null>(null);
 // Connectivity status
 const isOnline = ref(navigator.onLine);
 
-import type { PeptideProtocol, SummaryFormat, CreateProtocolPayload } from "./api/peptrack";
-import { listProtocols, saveProtocol, summarizeContent } from "./api/peptrack";
-
-declare global {
-  interface WindowEventMap {
-    "peptrack:prefill-summary": CustomEvent<{ title?: string; content?: string }>;
-  }
-}
+import type { PeptideProtocol, CreateProtocolPayload } from "./api/peptrack";
+import { listProtocols, saveProtocol, exportBackupData } from "./api/peptrack";
 
 const protocols = ref<PeptideProtocol[]>([]);
 const loadingProtocols = ref(false);
 const savingProtocol = ref(false);
-const summaryOutput = ref<string | null>(null);
-const summaryProvider = ref<string | null>(null);
-const summarizing = ref(false);
 const errorMessage = ref<string | null>(null);
 
 const form = ref({
@@ -43,12 +34,6 @@ const form = ref({
   peptideName: "",
   notes: "",
   targetConcentration: "" as string | number,
-});
-
-const summaryForm = ref({
-  title: "",
-  content: "",
-  format: "Markdown" as SummaryFormat,
 });
 
 async function refreshProtocols() {
@@ -95,48 +80,26 @@ async function handleCreateProtocol() {
   }
 }
 
-async function handleSummarize() {
-  if (!summaryForm.value.title || !summaryForm.value.content) {
-    errorMessage.value = "Provide both a title and content to summarize.";
-    return;
-  }
-  summarizing.value = true;
-  errorMessage.value = null;
-  summaryOutput.value = null;
-  summaryProvider.value = null;
+// Navigation helpers for Dashboard quick actions
+function handleNavigateToTab(tab: string) {
+  currentView.value = tab as View;
+}
+
+function handleQuickLogDose() {
+  currentView.value = "doses";
+}
+
+async function handleQuickBackup() {
   try {
-    const result = await summarizeContent({
-      title: summaryForm.value.title,
-      content: summaryForm.value.content,
-      format: summaryForm.value.format,
-    });
-    summaryProvider.value = result.provider;
-    summaryOutput.value = result.output;
+    await exportBackupData();
+    // Success message handled by the API
   } catch (error) {
-    errorMessage.value = `Summarization failed: ${String(error)}`;
-  } finally {
-    summarizing.value = false;
+    errorMessage.value = `Backup failed: ${String(error)}`;
   }
 }
 
 function showHelp() {
   welcomeScreen.value?.open();
-}
-
-function handleSummaryPrefill(event: Event) {
-  const detail = (event as CustomEvent<{ title?: string; content?: string }>).detail;
-  if (!detail) {
-    return;
-  }
-  summaryForm.value = {
-    ...summaryForm.value,
-    title: detail.title ?? "",
-    content: detail.content ?? "",
-  };
-  currentView.value = "ai";
-  requestAnimationFrame(() => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  });
 }
 
 // Network status detection
@@ -150,13 +113,11 @@ onMounted(() => {
   // Listen for connectivity changes
   window.addEventListener('online', updateOnlineStatus);
   window.addEventListener('offline', updateOnlineStatus);
-  window.addEventListener("peptrack:prefill-summary", handleSummaryPrefill as EventListener);
 });
 
 onUnmounted(() => {
   window.removeEventListener('online', updateOnlineStatus);
   window.removeEventListener('offline', updateOnlineStatus);
-  window.removeEventListener("peptrack:prefill-summary", handleSummaryPrefill as EventListener);
 });
 </script>
 
@@ -170,7 +131,7 @@ onUnmounted(() => {
         <div>
           <h1>🧪 PepTrack</h1>
           <p class="subtitle">
-            Keep track of your peptides and research - all stored privately on your computer.
+            Track your peptides and research - all stored privately on your computer.
           </p>
         </div>
         <div class="header-actions">
@@ -192,43 +153,49 @@ onUnmounted(() => {
     <!-- Main Navigation -->
     <nav class="main-nav">
       <button
-        @click="currentView = 'protocols'"
-        :class="['nav-btn', { active: currentView === 'protocols' }]"
+        @click="currentView = 'dashboard'"
+        :class="['nav-btn', { active: currentView === 'dashboard' }]"
+        title="Dashboard overview"
       >
-        <span class="nav-icon">📋</span>
-        <span class="nav-label">Protocols</span>
+        <span class="nav-icon">🏠</span>
+        <span class="nav-label">Dashboard</span>
       </button>
       <button
         @click="currentView = 'doses'"
         :class="['nav-btn', { active: currentView === 'doses' }]"
+        title="Log and track doses"
       >
         <span class="nav-icon">💉</span>
         <span class="nav-label">Doses</span>
       </button>
       <button
-        @click="currentView = 'ai'"
-        :class="['nav-btn', { active: currentView === 'ai' }]"
+        @click="currentView = 'protocols'"
+        :class="['nav-btn', { active: currentView === 'protocols' }]"
+        title="Manage peptide protocols"
       >
-        <span class="nav-icon">🤖</span>
-        <span class="nav-label">AI Summary</span>
+        <span class="nav-icon">🧪</span>
+        <span class="nav-label">Protocols</span>
       </button>
       <button
-        @click="currentView = 'literature'"
-        :class="['nav-btn', { active: currentView === 'literature' }]"
+        @click="currentView = 'research'"
+        :class="['nav-btn', { active: currentView === 'research' }]"
+        title="Literature search and AI summaries"
       >
         <span class="nav-icon">📚</span>
-        <span class="nav-label">Literature</span>
+        <span class="nav-label">Research</span>
       </button>
       <button
         @click="currentView = 'operations'"
         :class="['nav-btn', { active: currentView === 'operations' }]"
+        title="Manage suppliers and inventory"
       >
         <span class="nav-icon">🏢</span>
-        <span class="nav-label">Suppliers & Inventory</span>
+        <span class="nav-label">Operations</span>
       </button>
       <button
         @click="currentView = 'settings'"
         :class="['nav-btn', { active: currentView === 'settings' }]"
+        title="Configure settings and backups"
       >
         <span class="nav-icon">⚙️</span>
         <span class="nav-label">Settings</span>
@@ -238,6 +205,20 @@ onUnmounted(() => {
     <section v-if="errorMessage" class="banner error">
       ⚠️ {{ errorMessage }}
     </section>
+
+    <!-- Dashboard View (NEW) -->
+    <div v-if="currentView === 'dashboard'" class="view-content full-height">
+      <Dashboard
+        @navigateToTab="handleNavigateToTab"
+        @quickLogDose="handleQuickLogDose"
+        @quickBackup="handleQuickBackup"
+      />
+    </div>
+
+    <!-- Doses View -->
+    <div v-if="currentView === 'doses'" class="view-content full-height">
+      <DoseTracker />
+    </div>
 
     <!-- Protocols View -->
     <div v-if="currentView === 'protocols'" class="view-content">
@@ -260,27 +241,9 @@ onUnmounted(() => {
       </section>
     </div>
 
-    <!-- Doses View -->
-    <div v-if="currentView === 'doses'" class="view-content">
-      <DoseTracker />
-    </div>
-
-    <!-- AI Summary View -->
-    <div v-if="currentView === 'ai'" class="view-content">
-      <AiSummaryPanel
-        :form="summaryForm"
-        :summarizing="summarizing"
-        :summary-output="summaryOutput"
-        :summary-provider="summaryProvider"
-        @summarize="handleSummarize"
-        @update:title="summaryForm.title = $event"
-        @update:content="summaryForm.content = $event"
-      />
-    </div>
-
-    <!-- Literature View -->
-    <div v-if="currentView === 'literature'" class="view-content">
-      <LiteratureSearch />
+    <!-- Research View (NEW - combines AI + Literature) -->
+    <div v-if="currentView === 'research'" class="view-content full-height">
+      <Research />
     </div>
 
     <!-- Operations View -->
@@ -292,13 +255,40 @@ onUnmounted(() => {
     </div>
 
     <!-- Settings View -->
-    <div v-if="currentView === 'settings'" class="view-content">
+    <div v-if="currentView === 'settings'" class="view-content full-height">
       <Settings />
     </div>
   </main>
 </template>
 
 <style scoped>
+.page {
+  max-width: 1800px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+header {
+  margin-bottom: 24px;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 36px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.subtitle {
+  margin: 8px 0 0 0;
+  color: #666;
+  font-size: 16px;
+}
+
 .header-content {
   display: flex;
   justify-content: space-between;
@@ -357,6 +347,10 @@ onUnmounted(() => {
   animation: fadeIn 0.3s ease;
 }
 
+.view-content.full-height {
+  min-height: calc(100vh - 280px);
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -366,6 +360,13 @@ onUnmounted(() => {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-top: 20px;
 }
 
 .help-btn {
@@ -432,6 +433,25 @@ onUnmounted(() => {
   }
 }
 
+.banner {
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-weight: 600;
+}
+
+.banner.error {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+@media (max-width: 1200px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 768px) {
   .header-content {
     flex-direction: column;
@@ -444,6 +464,52 @@ onUnmounted(() => {
 
   .help-btn {
     align-self: flex-end;
+  }
+
+  .main-nav {
+    flex-wrap: wrap;
+  }
+
+  .nav-label {
+    display: none;
+  }
+
+  .nav-btn {
+    flex: 0 0 auto;
+    padding: 12px 16px;
+  }
+
+  .nav-icon {
+    font-size: 24px;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .page {
+    background: #1a1a1a;
+    color: #e0e0e0;
+  }
+
+  .subtitle {
+    color: #aaa;
+  }
+
+  .main-nav {
+    background: #2a2a2a;
+  }
+
+  .nav-btn {
+    color: #aaa;
+  }
+
+  .nav-btn:hover {
+    background: #3a3a3a;
+  }
+
+  .banner.error {
+    background-color: #4a1a1a;
+    color: #ff6b6b;
+    border-color: #6a2a2a;
   }
 }
 </style>

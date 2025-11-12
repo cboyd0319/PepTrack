@@ -1,62 +1,23 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import ScheduledBackup from "./ScheduledBackup.vue";
-import GoogleDriveBackup from "./GoogleDriveBackup.vue";
-import BackupExport from "./BackupExport.vue";
-import RestoreBackup from "./RestoreBackup.vue";
+import BackupAndRestore from "./BackupAndRestore.vue";
 import NotificationPreferences from "./NotificationPreferences.vue";
-import SupplierManagement from "./SupplierManagement.vue";
-import InventoryManagement from "./InventoryManagement.vue";
+import AboutHelp from "./AboutHelp.vue";
 
-type Tab =
-  | "scheduled"
-  | "drive"
-  | "backup"
-  | "restore"
-  | "notifications"
-  | "suppliers"
-  | "inventory";
+type Tab = "backup" | "notifications" | "about";
 
-interface TabConfig {
-  id: Tab;
-  label: string;
-  description: string;
-}
-
-const activeTab = ref<Tab>("scheduled");
-
-const tabGroups: Array<{ label: string; tabs: TabConfig[] }> = [
-  {
-    label: "Backup & Restore",
-    tabs: [
-      { id: "scheduled", label: "⏰ Scheduled Backups", description: "Automatic backup scheduling" },
-      { id: "drive", label: "☁️ Google Drive", description: "Cloud backup setup" },
-      { id: "backup", label: "💾 Manual Backup", description: "Export data manually" },
-      { id: "restore", label: "📥 Restore", description: "Restore from backup" },
-    ],
-  },
-  {
-    label: "Operations & Alerts",
-    tabs: [
-      { id: "suppliers", label: "🏢 Suppliers", description: "Manage suppliers and vendors" },
-      { id: "inventory", label: "📦 Inventory", description: "Track peptide vials and stock" },
-      { id: "notifications", label: "🔔 Notifications", description: "Alert preferences" },
-    ],
-  },
-];
+const activeTab = ref<Tab>("backup");
 
 function setActiveTab(tab: Tab) {
   activeTab.value = tab;
 }
 
-function handleTestNotification() {
-  // Send a test notification
+function testNotification() {
   try {
-    if ('Notification' in window) {
+    if ("Notification" in window) {
       if (Notification.permission === 'granted') {
         new Notification('🔔 Test Notification', {
           body: 'This is a test notification from PepTrack!',
-          icon: '/icon.png', // Optional: add your app icon
         });
       } else if (Notification.permission !== 'denied') {
         Notification.requestPermission().then((permission) => {
@@ -77,200 +38,151 @@ function handleTestNotification() {
 </script>
 
 <template>
-  <div class="settings-page">
+  <div class="settings">
     <div class="settings-header">
       <h1>⚙️ Settings</h1>
-      <p class="header-description">
-        Manage your backup settings, cloud storage, and data
-      </p>
+      <p class="subtitle">Configure backups, notifications, and preferences</p>
     </div>
 
-    <div class="tabs-container">
-      <div class="tabs-scroll-wrapper">
-        <div class="tabs">
-          <div
-            v-for="group in tabGroups"
-            :key="group.label"
-            class="tab-group"
-          >
-            <p class="tab-group-label">{{ group.label }}</p>
-            <div class="tab-group-buttons">
-              <button
-                v-for="tab in group.tabs"
-                :key="tab.id"
-                @click="setActiveTab(tab.id)"
-                :class="['tab-button', { active: activeTab === tab.id }]"
-              >
-                <span class="tab-icon">{{ tab.label.split(' ')[0] }}</span>
-                <div class="tab-info">
-                  <div class="tab-label">{{ tab.label.substring(tab.label.indexOf(' ') + 1) }}</div>
-                  <div class="tab-desc">{{ tab.description }}</div>
-                </div>
+    <!-- Tab Navigation -->
+    <div class="settings-tabs">
+      <button
+        :class="['tab-btn', { active: activeTab === 'backup' }]"
+        @click="setActiveTab('backup')"
+      >
+        <span class="tab-icon">📦</span>
+        <span class="tab-label">Backup & Restore</span>
+      </button>
+      <button
+        :class="['tab-btn', { active: activeTab === 'notifications' }]"
+        @click="setActiveTab('notifications')"
+      >
+        <span class="tab-icon">🔔</span>
+        <span class="tab-label">Notifications</span>
+      </button>
+      <button
+        :class="['tab-btn', { active: activeTab === 'about' }]"
+        @click="setActiveTab('about')"
+      >
+        <span class="tab-icon">ℹ️</span>
+        <span class="tab-label">About & Help</span>
+      </button>
+    </div>
+
+    <!-- Tab Content -->
+    <div class="settings-content">
+      <!-- Backup & Restore Tab -->
+      <div v-if="activeTab === 'backup'" class="tab-panel">
+        <BackupAndRestore />
+      </div>
+
+      <!-- Notifications Tab -->
+      <div v-if="activeTab === 'notifications'" class="tab-panel">
+        <div class="notifications-section">
+          <h2>🔔 Notification Preferences</h2>
+          <p class="description">Configure when you want to receive notifications</p>
+
+          <div class="notification-content">
+            <NotificationPreferences />
+
+            <div class="test-section">
+              <h3>Test Notifications</h3>
+              <p>Make sure notifications are working properly</p>
+              <button @click="testNotification" class="test-btn">
+                Send Test Notification
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="tab-content">
-        <transition name="fade" mode="out-in">
-          <div v-if="activeTab === 'scheduled'" key="scheduled" class="tab-panel">
-            <ScheduledBackup />
-          </div>
-
-          <div v-else-if="activeTab === 'drive'" key="drive" class="tab-panel">
-            <GoogleDriveBackup />
-          </div>
-
-          <div v-else-if="activeTab === 'backup'" key="backup" class="tab-panel">
-            <BackupExport />
-          </div>
-
-          <div v-else-if="activeTab === 'restore'" key="restore" class="tab-panel">
-            <RestoreBackup />
-          </div>
-
-          <div v-else-if="activeTab === 'suppliers'" key="suppliers" class="tab-panel">
-            <SupplierManagement />
-          </div>
-
-          <div v-else-if="activeTab === 'inventory'" key="inventory" class="tab-panel">
-            <InventoryManagement />
-          </div>
-
-          <div v-else-if="activeTab === 'notifications'" key="notifications" class="tab-panel">
-            <NotificationPreferences @test-notification="handleTestNotification" />
-          </div>
-        </transition>
+      <!-- About & Help Tab -->
+      <div v-if="activeTab === 'about'" class="tab-panel">
+        <AboutHelp />
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.settings-page {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 20px;
-  min-height: 100vh;
+.settings {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #fafafa;
 }
 
 .settings-header {
-  margin-bottom: 24px;
+  padding: 24px 24px 16px 24px;
+  background: white;
+  border-bottom: 2px solid #e0e0e0;
 }
 
 .settings-header h1 {
-  margin: 0 0 4px 0;
   font-size: 32px;
-  color: #2c3e50;
-}
-
-.header-description {
-  margin: 0;
-  color: #666;
-  font-size: 14px;
-}
-
-.tabs-container {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-}
-
-/* Horizontal scrollable tabs */
-.tabs-scroll-wrapper {
-  overflow-x: auto;
-  overflow-y: hidden;
-  border-bottom: 2px solid #e0e0e0;
-  background: #f8f9fa;
-}
-
-.tabs {
-  display: flex;
-  flex-direction: column;
-  min-width: min-content;
-  padding: 12px;
-  gap: 16px;
-}
-
-.tab-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.tab-group-label {
-  font-size: 12px;
   font-weight: 700;
-  text-transform: uppercase;
-  color: #6b7280;
-  letter-spacing: 0.05em;
+  margin: 0 0 8px 0;
+  color: #1a1a1a;
 }
 
-.tab-group-buttons {
+.subtitle {
+  font-size: 16px;
+  color: #666;
+  margin: 0;
+}
+
+/* Tab Navigation */
+.settings-tabs {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 16px;
+  background: white;
+  border-bottom: 2px solid #e0e0e0;
 }
 
-.tab-button {
+.tab-btn {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 20px;
+  gap: 8px;
+  padding: 14px 24px;
+  background: transparent;
   border: none;
-  background: white;
-  border-radius: 8px;
+  border-bottom: 3px solid transparent;
+  font-size: 15px;
+  font-weight: 600;
+  color: #666;
   cursor: pointer;
   transition: all 0.2s;
+  position: relative;
+  top: 2px;
   white-space: nowrap;
-  flex-shrink: 0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.tab-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+.tab-btn:hover {
+  color: #1976d2;
+  background: #f5f5f5;
+  border-radius: 8px 8px 0 0;
 }
 
-.tab-button.active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-}
-
-.tab-button.active .tab-label,
-.tab-button.active .tab-desc {
-  color: white;
+.tab-btn.active {
+  color: #1976d2;
+  border-bottom-color: #1976d2;
+  background: white;
 }
 
 .tab-icon {
-  font-size: 24px;
-  flex-shrink: 0;
-}
-
-.tab-info {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  font-size: 18px;
 }
 
 .tab-label {
   font-size: 14px;
-  font-weight: 600;
-  color: #333;
 }
 
-.tab-desc {
-  font-size: 11px;
-  color: #666;
-}
-
-/* Content area */
-.tab-content {
-  padding: 24px;
+/* Content Area */
+.settings-content {
+  flex: 1;
+  overflow-y: auto;
+  background: #fafafa;
 }
 
 .tab-panel {
@@ -288,41 +200,131 @@ function handleTestNotification() {
   }
 }
 
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
+/* Notifications Section */
+.notifications-section {
+  padding: 24px;
+  max-width: 900px;
+  margin: 0 auto;
 }
 
-.fade-enter-from {
-  opacity: 0;
-  transform: translateY(10px);
+.notifications-section h2 {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  color: #1a1a1a;
 }
 
-.fade-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
+.description {
+  font-size: 15px;
+  color: #666;
+  margin: 0 0 24px 0;
+}
+
+.notification-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.test-section {
+  background: white;
+  padding: 24px;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+}
+
+.test-section h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  color: #1a1a1a;
+}
+
+.test-section p {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.test-btn {
+  padding: 10px 20px;
+  background: #1976d2;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.test-btn:hover {
+  background: #1565c0;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
 }
 
 /* Responsive */
 @media (max-width: 768px) {
-  .settings-page {
-    padding: 12px;
+  .settings-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
-  .tabs {
-    padding: 8px;
-  }
-
-  .tab-button {
-    padding: 10px 16px;
-  }
-
-  .tab-desc {
+  .tab-label {
     display: none;
   }
 
-  .tab-content {
-    padding: 16px;
+  .tab-icon {
+    font-size: 24px;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .settings {
+    background: #1a1a1a;
+  }
+
+  .settings-header,
+  .settings-tabs {
+    background: #2a2a2a;
+    border-bottom-color: #3a3a3a;
+  }
+
+  .settings-header h1,
+  .notifications-section h2,
+  .test-section h3 {
+    color: #fff;
+  }
+
+  .subtitle,
+  .description,
+  .test-section p {
+    color: #aaa;
+  }
+
+  .tab-btn {
+    color: #aaa;
+  }
+
+  .tab-btn:hover {
+    color: #fff;
+    background: #3a3a3a;
+  }
+
+  .tab-btn.active {
+    color: #64b5f6;
+    border-bottom-color: #64b5f6;
+    background: #1a1a1a;
+  }
+
+  .settings-content {
+    background: #1a1a1a;
+  }
+
+  .test-section {
+    background: #2a2a2a;
+    border-color: #3a3a3a;
   }
 }
 </style>
