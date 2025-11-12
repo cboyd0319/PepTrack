@@ -9,7 +9,7 @@ import {
 } from "../errorHandling";
 
 // Mock the global showToast function
-(global as any).showToast = vi.fn();
+(globalThis as any).showToast = vi.fn();
 
 describe("errorHandling", () => {
   beforeEach(() => {
@@ -21,7 +21,7 @@ describe("errorHandling", () => {
       const error = new Error("Network connection failed");
       showErrorToast(error);
 
-      expect((global as any).showToast).toHaveBeenCalledWith(
+      expect((globalThis as any).showToast).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "error",
           title: "Network Error",
@@ -33,7 +33,7 @@ describe("errorHandling", () => {
       const error = new Error("File not found at /path/to/file");
       showErrorToast(error);
 
-      expect((global as any).showToast).toHaveBeenCalledWith(
+      expect((globalThis as any).showToast).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "error",
           title: "File Not Found",
@@ -45,7 +45,7 @@ describe("errorHandling", () => {
       const error = new Error("Google Drive not connected");
       showErrorToast(error);
 
-      expect((global as any).showToast).toHaveBeenCalledWith(
+      expect((globalThis as any).showToast).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "error",
           title: "Google Drive Not Connected",
@@ -57,7 +57,7 @@ describe("errorHandling", () => {
       const error = new Error("Token has expired");
       showErrorToast(error);
 
-      expect((global as any).showToast).toHaveBeenCalledWith(
+      expect((globalThis as any).showToast).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "error",
           title: "Session Expired",
@@ -69,7 +69,7 @@ describe("errorHandling", () => {
       const error = new Error("Backup operation failed");
       showErrorToast(error);
 
-      expect((global as any).showToast).toHaveBeenCalledWith(
+      expect((globalThis as any).showToast).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "error",
           title: "Backup Failed",
@@ -81,7 +81,7 @@ describe("errorHandling", () => {
       const error = new Error("Restore operation failed");
       showErrorToast(error);
 
-      expect((global as any).showToast).toHaveBeenCalledWith(
+      expect((globalThis as any).showToast).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "error",
           title: "Restore Failed",
@@ -93,7 +93,7 @@ describe("errorHandling", () => {
       const error = new Error("Required field is missing");
       showErrorToast(error);
 
-      expect((global as any).showToast).toHaveBeenCalledWith(
+      expect((globalThis as any).showToast).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "error",
           title: "Validation Error",
@@ -105,7 +105,7 @@ describe("errorHandling", () => {
       const error = new Error("Database operation failed");
       showErrorToast(error);
 
-      expect((global as any).showToast).toHaveBeenCalledWith(
+      expect((globalThis as any).showToast).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "error",
           title: "Database Error",
@@ -117,7 +117,7 @@ describe("errorHandling", () => {
       const error = new Error("Something weird happened");
       showErrorToast(error);
 
-      expect((global as any).showToast).toHaveBeenCalledWith(
+      expect((globalThis as any).showToast).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "error",
           title: "Unexpected Error",
@@ -135,7 +135,7 @@ describe("errorHandling", () => {
 
       showErrorToast(error, context);
 
-      expect((global as any).showToast).toHaveBeenCalledWith(
+      expect((globalThis as any).showToast).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "error",
           message: expect.stringContaining("Additional info"),
@@ -147,7 +147,7 @@ describe("errorHandling", () => {
       const error = new Error("Network error");
       showErrorToast(error);
 
-      expect((global as any).showToast).toHaveBeenCalledWith(
+      expect((globalThis as any).showToast).toHaveBeenCalledWith(
         expect.objectContaining({
           message: expect.stringContaining("💡"),
         })
@@ -158,7 +158,7 @@ describe("errorHandling", () => {
       const error = "String error message";
       showErrorToast(error);
 
-      expect((global as any).showToast).toHaveBeenCalled();
+      expect((globalThis as any).showToast).toHaveBeenCalled();
     });
   });
 
@@ -166,7 +166,7 @@ describe("errorHandling", () => {
     it("shows success toast with default duration", () => {
       showSuccessToast("Success", "Operation completed");
 
-      expect((global as any).showToast).toHaveBeenCalledWith({
+      expect((globalThis as any).showToast).toHaveBeenCalledWith({
         type: "success",
         title: "Success",
         message: "Operation completed",
@@ -177,7 +177,7 @@ describe("errorHandling", () => {
     it("shows success toast with custom duration", () => {
       showSuccessToast("Success", "Operation completed", 3000);
 
-      expect((global as any).showToast).toHaveBeenCalledWith({
+      expect((globalThis as any).showToast).toHaveBeenCalledWith({
         type: "success",
         title: "Success",
         message: "Operation completed",
@@ -190,7 +190,7 @@ describe("errorHandling", () => {
     it("shows warning toast", () => {
       showWarningToast("Warning", "Please be careful");
 
-      expect((global as any).showToast).toHaveBeenCalledWith({
+      expect((globalThis as any).showToast).toHaveBeenCalledWith({
         type: "warning",
         title: "Warning",
         message: "Please be careful",
@@ -203,7 +203,7 @@ describe("errorHandling", () => {
     it("shows info toast", () => {
       showInfoToast("Info", "Here's some information");
 
-      expect((global as any).showToast).toHaveBeenCalledWith({
+      expect((globalThis as any).showToast).toHaveBeenCalledWith({
         type: "info",
         title: "Info",
         message: "Here's some information",
@@ -220,7 +220,7 @@ describe("errorHandling", () => {
       });
 
       expect(result).toBe("success");
-      expect((global as any).showToast).not.toHaveBeenCalled();
+      expect((globalThis as any).showToast).not.toHaveBeenCalled();
     });
 
     it("returns null and shows toast on error", async () => {
@@ -230,7 +230,7 @@ describe("errorHandling", () => {
       });
 
       expect(result).toBeNull();
-      expect((global as any).showToast).toHaveBeenCalled();
+      expect((globalThis as any).showToast).toHaveBeenCalled();
     });
 
     it("passes context to error toast", async () => {
@@ -242,7 +242,7 @@ describe("errorHandling", () => {
 
       await handleAsync(operation, context);
 
-      expect((global as any).showToast).toHaveBeenCalledWith(
+      expect((globalThis as any).showToast).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "error",
         })
@@ -274,7 +274,7 @@ describe("errorHandling", () => {
       const error = new Error("Google Drive not connected");
       showErrorToast(error);
 
-      expect((global as any).showToast).toHaveBeenCalledWith(
+      expect((globalThis as any).showToast).toHaveBeenCalledWith(
         expect.objectContaining({
           title: "Google Drive Not Connected",
         })
@@ -285,7 +285,7 @@ describe("errorHandling", () => {
       const error = new Error("NETWORK ERROR");
       showErrorToast(error);
 
-      expect((global as any).showToast).toHaveBeenCalledWith(
+      expect((globalThis as any).showToast).toHaveBeenCalledWith(
         expect.objectContaining({
           title: "Network Error",
         })
@@ -295,8 +295,8 @@ describe("errorHandling", () => {
 
   describe("fallback behavior", () => {
     it("falls back to console if showToast is not available", () => {
-      const originalShowToast = (global as any).showToast;
-      delete (global as any).showToast;
+      const originalShowToast = (globalThis as any).showToast;
+      delete (globalThis as any).showToast;
 
       const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -306,7 +306,7 @@ describe("errorHandling", () => {
       expect(consoleSpy).toHaveBeenCalled();
 
       consoleSpy.mockRestore();
-      (global as any).showToast = originalShowToast;
+      (globalThis as any).showToast = originalShowToast;
     });
   });
 });

@@ -172,7 +172,7 @@ const groupedByPeptide = computed(() => {
     if (!groups[entry.peptide_name]) {
       groups[entry.peptide_name] = [];
     }
-    groups[entry.peptide_name].push(entry);
+    groups[entry.peptide_name]!.push(entry);
   });
   return groups;
 });
@@ -245,12 +245,12 @@ const colors = [
 
 function getColorForPeptide(peptideName: string): string {
   const index = peptideNames.value.indexOf(peptideName);
-  return colors[index % colors.length];
+  return colors[index % colors.length] ?? '#3498db';
 }
 
 function getLatestPrice(peptideData: PriceHistory[]): number {
   if (peptideData.length === 0) return 0;
-  return peptideData[peptideData.length - 1].cost_per_mg;
+  return peptideData[peptideData.length - 1]!.cost_per_mg;
 }
 
 function formatDate(dateString: string): string {
@@ -274,7 +274,7 @@ function showTooltip(event: MouseEvent, point: PriceHistory, peptideName: string
     peptideName,
     price: point.cost_per_mg.toFixed(2),
     date: formatDate(point.recorded_at),
-    inStock: point.in_stock !== null ? point.in_stock : null,
+    inStock: point.in_stock !== undefined && point.in_stock !== null ? point.in_stock : null,
   };
 }
 
