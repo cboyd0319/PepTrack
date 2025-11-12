@@ -13,6 +13,7 @@ import SupplierManagement from "./components/SupplierManagement.vue";
 import InventoryManagement from "./components/InventoryManagement.vue";
 import Toast from "./components/Toast.vue";
 import GlobalSearch from "./components/GlobalSearch.vue";
+import QuickActionsFAB from "./components/QuickActionsFAB.vue";
 
 // Navigation
 type View = "dashboard" | "doses" | "protocols" | "ai-assistant" | "research" | "operations" | "settings" | "alerts";
@@ -26,6 +27,7 @@ const isOnline = ref(navigator.onLine);
 
 import type { PeptideProtocol, CreateProtocolPayload } from "./api/peptrack";
 import { listProtocols, saveProtocol, exportBackupData } from "./api/peptrack";
+import { initializeTheme } from "./utils/darkMode";
 
 const protocols = ref<PeptideProtocol[]>([]);
 const loadingProtocols = ref(false);
@@ -95,6 +97,10 @@ function handleSearchNavigate(view: string) {
   currentView.value = view as View;
 }
 
+function handleOpenSearch() {
+  globalSearch.value?.open();
+}
+
 function handleQuickLogDose() {
   currentView.value = "doses";
 }
@@ -124,6 +130,9 @@ function updateOnlineStatus() {
 onMounted(() => {
   refreshProtocols();
 
+  // Initialize dark mode
+  initializeTheme();
+
   // Listen for connectivity changes
   window.addEventListener('online', updateOnlineStatus);
   window.addEventListener('offline', updateOnlineStatus);
@@ -139,6 +148,7 @@ onUnmounted(() => {
   <Toast />
   <WelcomeScreen ref="welcomeScreen" />
   <GlobalSearch ref="globalSearch" @navigate="handleSearchNavigate" />
+  <QuickActionsFAB @navigate="handleSearchNavigate" @openSearch="handleOpenSearch" />
 
   <main class="page">
     <header>
@@ -523,6 +533,7 @@ header h1 {
   }
 }
 
+/* Dark mode styles - apply for both system preference and manual toggle */
 @media (prefers-color-scheme: dark) {
   .page {
     background: #1a1a1a;
@@ -559,6 +570,43 @@ header h1 {
   .back-btn:hover {
     background: #4a4a4a;
   }
+}
+
+/* Dark mode class-based styles (for manual toggle) */
+:global(.dark-mode) .page {
+  background: #1a1a1a;
+  color: #e0e0e0;
+}
+
+:global(.dark-mode) .subtitle {
+  color: #aaa;
+}
+
+:global(.dark-mode) .main-nav {
+  background: #2a2a2a;
+}
+
+:global(.dark-mode) .nav-btn {
+  color: #aaa;
+}
+
+:global(.dark-mode) .nav-btn:hover {
+  background: #3a3a3a;
+}
+
+:global(.dark-mode) .banner.error {
+  background-color: #4a1a1a;
+  color: #ff6b6b;
+  border-color: #6a2a2a;
+}
+
+:global(.dark-mode) .back-btn {
+  background: #3a3a3a;
+  color: #fff;
+}
+
+:global(.dark-mode) .back-btn:hover {
+  background: #4a4a4a;
 }
 
 /* Back Navigation */

@@ -2,9 +2,12 @@
 import { ref } from "vue";
 import BackupAndRestore from "./BackupAndRestore.vue";
 import NotificationPreferences from "./NotificationPreferences.vue";
+import CalendarIntegration from "./CalendarIntegration.vue";
+import DarkModeToggle from "./DarkModeToggle.vue";
+import DashboardWidgetSettings from "./DashboardWidgetSettings.vue";
 import AboutHelp from "./AboutHelp.vue";
 
-type Tab = "backup" | "notifications" | "about";
+type Tab = "backup" | "notifications" | "calendar" | "appearance" | "dashboard" | "about";
 
 const activeTab = ref<Tab>("backup");
 
@@ -61,6 +64,27 @@ function testNotification() {
         <span class="tab-label">Notifications</span>
       </button>
       <button
+        :class="['tab-btn', { active: activeTab === 'calendar' }]"
+        @click="setActiveTab('calendar')"
+      >
+        <span class="tab-icon">📅</span>
+        <span class="tab-label">Calendar</span>
+      </button>
+      <button
+        :class="['tab-btn', { active: activeTab === 'appearance' }]"
+        @click="setActiveTab('appearance')"
+      >
+        <span class="tab-icon">🎨</span>
+        <span class="tab-label">Appearance</span>
+      </button>
+      <button
+        :class="['tab-btn', { active: activeTab === 'dashboard' }]"
+        @click="setActiveTab('dashboard')"
+      >
+        <span class="tab-icon">📊</span>
+        <span class="tab-label">Dashboard</span>
+      </button>
+      <button
         :class="['tab-btn', { active: activeTab === 'about' }]"
         @click="setActiveTab('about')"
       >
@@ -94,6 +118,21 @@ function testNotification() {
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Calendar Tab -->
+      <div v-if="activeTab === 'calendar'" class="tab-panel">
+        <CalendarIntegration />
+      </div>
+
+      <!-- Appearance Tab -->
+      <div v-if="activeTab === 'appearance'" class="tab-panel">
+        <DarkModeToggle />
+      </div>
+
+      <!-- Dashboard Tab -->
+      <div v-if="activeTab === 'dashboard'" class="tab-panel">
+        <DashboardWidgetSettings />
       </div>
 
       <!-- About & Help Tab -->
