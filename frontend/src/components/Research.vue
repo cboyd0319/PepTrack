@@ -25,7 +25,7 @@
 
       <!-- AI Summary Tab -->
       <div v-show="activeTab === 'ai'" class="tab-panel">
-        <AiSummaryPanel
+        <EnhancedAiSummary
           :form="form"
           :summarizing="summarizing"
           :summary-output="currentSummary"
@@ -33,6 +33,7 @@
           @summarize="handleSummarize"
           @update:title="updateTitle"
           @update:content="updateContent"
+          @update:format="updateFormat"
         />
       </div>
     </div>
@@ -42,7 +43,7 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue';
 import LiteratureSearch from './LiteratureSearch.vue';
-import AiSummaryPanel from './AiSummaryPanel.vue';
+import EnhancedAiSummary from './EnhancedAiSummary.vue';
 import { useLiterature } from '../composables/useLiterature';
 import type { SummaryFormat } from '../api/peptrack';
 
@@ -81,6 +82,10 @@ function updateTitle(value: string) {
 
 function updateContent(value: string) {
   form.content = value;
+}
+
+function updateFormat(value: SummaryFormat) {
+  form.format = value;
 }
 </script>
 

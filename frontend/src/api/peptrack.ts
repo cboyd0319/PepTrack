@@ -370,9 +370,11 @@ export interface InventoryItem {
   expiry_date?: string | null;
   cost_per_mg?: number | null;
   quantity_mg?: number | null;
+  quantity_remaining_mg?: number | null; // NEW: Track remaining quantity
   concentration_mg_ml?: number | null;
   batch_number?: string | null;
   lot_number?: string | null;
+  low_stock_threshold_mg?: number | null; // NEW: Alert threshold
   notes?: string | null;
   created_at: string;
   updated_at: string;
@@ -387,9 +389,11 @@ export interface CreateInventoryPayload {
   expiryDate?: string;
   costPerMg?: number;
   quantityMg?: number;
+  quantityRemainingMg?: number;
   concentrationMgMl?: number;
   batchNumber?: string;
   lotNumber?: string;
+  lowStockThresholdMg?: number;
   notes?: string;
 }
 
@@ -401,9 +405,11 @@ export interface UpdateInventoryPayload {
   expiryDate?: string;
   costPerMg?: number;
   quantityMg?: number;
+  quantityRemainingMg?: number;
   concentrationMgMl?: number;
   batchNumber?: string;
   lotNumber?: string;
+  lowStockThresholdMg?: number;
   notes?: string;
 }
 
@@ -459,4 +465,159 @@ export async function updateInventoryItem(
 
 export async function deleteInventoryItem(itemId: string) {
   return invoke<void>("delete_inventory_item", { itemId });
+}
+
+// ========== Analytics & Price History ==========
+
+export interface PriceHistory {
+  id: string;
+  supplier_id: string;
+  peptide_name: string;
+  cost_per_mg: number;
+  url?: string | null;
+  in_stock?: boolean | null;
+  notes?: string | null;
+  recorded_at: string;
+}
+
+export interface AddPricePayload {
+  supplierId: string;
+  peptideName: string;
+  costPerMg: number;
+  url?: string;
+  inStock?: boolean;
+  notes?: string;
+}
+
+export interface PriceComparison {
+  peptide_name: string;
+  suppliers: SupplierPrice[];
+  lowest_price: number;
+  highest_price: number;
+  average_price: number;
+}
+
+export interface SupplierPrice {
+  supplier_id: string;
+  supplier_name: string;
+  cost_per_mg: number;
+  in_stock?: boolean | null;
+  recorded_at: string;
+}
+
+// Price History API calls
+
+export async function addPriceHistory(payload: AddPricePayload) {
+  return invoke<PriceHistory>("add_price_history", { payload });
+}
+
+export async function listPriceHistory(
+  supplierId: string,
+  peptideName?: string
+) {
+  return invoke<PriceHistory[]>("list_price_history", {
+    supplierId,
+    peptideName,
+  });
+}
+
+export async function getLatestPrice(supplierId: string, peptideName: string) {
+  return invoke<PriceHistory | null>("get_latest_price", {
+    supplierId,
+    peptideName,
+  });
+}
+
+export async function comparePrices(peptideName: string) {
+  return invoke<PriceComparison>("compare_prices", { peptideName });
+}
+
+// ========== Alerts System ==========
+
+export type AlertType =
+  | "low_stock"
+  | "expiring_soon"
+  | "expired"
+  | "price_increase"
+  | "price_decrease"
+  | "out_of_stock";
+
+export type AlertSeverity = "info" | "warning" | "critical";
+
+export interface Alert {
+  id: string;
+  alert_type: AlertType;
+  severity: AlertSeverity;
+  title: string;
+  message: string;
+  related_id?: string | null;
+  related_type?: string | null;
+  is_read: boolean;
+  is_dismissed: boolean;
+  created_at: string;
+}
+
+export interface CreateAlertPayload {
+  alertType: AlertType;
+  severity: AlertSeverity;
+  title: string;
+  message: string;
+  relatedId?: string;
+  relatedType?: string;
+}
+
+// Alert API calls
+
+export async function createAlert(payload: CreateAlertPayload) {
+  return invoke<Alert>("create_alert", { payload });
+}
+
+export async function listAlerts(includeDismissed?: boolean) {
+  return invoke<Alert[]>("list_alerts", { includeDismissed });
+}
+
+export async function markAlertRead(alertId: string) {
+  return invoke<void>("mark_alert_read", { alertId });
+}
+
+export async function dismissAlert(alertId: string) {
+  return invoke<void>("dismiss_alert", { alertId });
+}
+
+export async function clearAllAlerts() {
+  return invoke<void>("clear_all_alerts");
+}
+
+// ========== AI Summary History ==========
+
+export interface SummaryHistory {
+  id: string;
+  title: string;
+  original_content: string;
+  summary_output: string;
+  format: string;
+  provider: string;
+  created_at: string;
+}
+
+export interface SaveSummaryPayload {
+  title: string;
+  originalContent: string;
+  summaryOutput: string;
+  format: string;
+  provider: string;
+}
+
+// Summary History API calls
+
+export async function saveSummary(payload: SaveSummaryPayload) {
+  return invoke<SummaryHistory>("save_summary", { payload });
+}
+
+export async function listSummaryHistory(limit?: number) {
+  return invoke<SummaryHistory[]>("list_summary_history", { limit });
+}
+
+export async function deleteSummaryFromHistory(summaryId: string) {
+  return invoke<void>("delete_summary", { summaryId });
 }
