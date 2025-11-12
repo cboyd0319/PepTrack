@@ -169,11 +169,11 @@ flowchart LR
 | Technology | Version | Purpose |
 |------------|---------|---------|
 | **Vue** | 3.5.24 | UI framework |
-| **Vite** | 7.2 | Build tool & dev server |
-| **TypeScript** | 5.9 | Type-safe JavaScript |
+| **Vite** | 7.2.2 | Build tool & dev server |
+| **TypeScript** | 5.9.3 | Type-safe JavaScript |
 | **Pinia** | 3.0.4 | State management |
 | **@vueuse/core** | 14.0.0 | Composition utilities |
-| **Vitest** | 2.1.4 | Component testing |
+| **Vitest** | 4.0.8 | Component testing (zero vulnerabilities) |
 
 ### External APIs
 - **PubMed** - Biomedical literature database
