@@ -32,6 +32,17 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "category": "Healthcare",
+    "shortDescription": "Track your peptide protocols, doses, and research",
+    "longDescription": "PepTrack is a comprehensive desktop application for managing peptide protocols, tracking doses, researching scientific literature, and maintaining supplier information. All data is stored locally and encrypted on your device.",
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "entitlements": null,
+      "exceptionDomain": "",
+      "frameworks": [],
+      "providerShortName": null,
+      "signingIdentity": null
+    }
   }
 }

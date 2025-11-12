@@ -12,6 +12,7 @@ use commands::{
         mark_alert_read, save_summary,
     },
     backup::{export_backup_data, get_backup_file_path},
+    defaults::{get_default_peptides, populate_default_peptides},
     doses::{delete_dose_log, list_dose_logs, list_dose_logs_for_protocol, log_dose},
     drive::{
         check_drive_status, complete_drive_oauth, disconnect_drive, start_drive_oauth,
@@ -149,7 +150,10 @@ pub fn run() {
             list_dose_schedules,
             update_dose_schedule,
             delete_dose_schedule,
-            get_pending_dose_reminders
+            get_pending_dose_reminders,
+            // Default peptides
+            get_default_peptides,
+            populate_default_peptides
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

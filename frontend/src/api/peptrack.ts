@@ -694,3 +694,22 @@ export async function deleteDoseSchedule(scheduleId: string) {
 export async function getPendingDoseReminders() {
   return invoke<DoseSchedule[]>("get_pending_dose_reminders");
 }
+
+// Default Peptides types
+
+export interface DefaultProtocol {
+  peptideName: string;
+  commonName: string;
+  typicalDoseRange: string;
+  notes: string;
+}
+
+// Default Peptides API calls
+
+export async function getDefaultPeptides() {
+  return invoke<DefaultProtocol[]>("get_default_peptides");
+}
+
+export async function populateDefaultPeptides() {
+  return invoke<number>("populate_default_peptides");
+}

@@ -1,9 +1,27 @@
 <template>
   <div class="dose-tracker">
     <h2>💉 Track Your Doses</h2>
-    <p class="subtitle">Log when you take your peptides</p>
+    <p class="subtitle">Log doses and set up recurring schedules</p>
 
-    <!-- Log New Dose Form -->
+    <!-- Tab Navigation -->
+    <div class="dose-tabs">
+      <button
+        :class="['tab-btn', { active: activeTab === 'log' }]"
+        @click="activeTab = 'log'"
+      >
+        📝 Log Dose
+      </button>
+      <button
+        :class="['tab-btn', { active: activeTab === 'schedules' }]"
+        @click="activeTab = 'schedules'"
+      >
+        ⏰ Schedules
+      </button>
+    </div>
+
+    <!-- Log Dose Tab -->
+    <div v-show="activeTab === 'log'" class="tab-content">
+      <!-- Log New Dose Form -->
     <div class="log-dose-section panel">
       <h3>➕ Log a Dose</h3>
       <div v-if="!hasProtocols" class="empty-state">
@@ -154,11 +172,18 @@
         </div>
       </div>
     </div>
+    </div>
+
+    <!-- Schedules Tab -->
+    <div v-show="activeTab === 'schedules'" class="tab-content">
+      <DoseScheduleManager />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
+import DoseScheduleManager from './DoseScheduleManager.vue';
 import { showErrorToast, showSuccessToast } from '../utils/errorHandling';
 import {
   logDose,
@@ -172,6 +197,7 @@ import {
 } from '../api/peptrack';
 
 // State
+const activeTab = ref<'log' | 'schedules'>('log');
 const protocols = ref<PeptideProtocol[]>([]);
 const doses = ref<DoseLog[]>([]);
 const filterProtocolId = ref('');
@@ -290,6 +316,55 @@ function formatDate(dateStr: string): string {
   padding: 20px;
   max-width: 1200px;
   margin: 0 auto;
+}
+
+/* Tab Navigation */
+.dose-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 20px 0;
+  padding: 4px;
+  background: #f5f5f5;
+  border-radius: 10px;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 12px 20px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tab-btn:hover {
+  background: rgba(102, 126, 234, 0.1);
+  color: #667eea;
+}
+
+.tab-btn.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.tab-content {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 h2 {

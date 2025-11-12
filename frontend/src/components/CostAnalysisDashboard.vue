@@ -472,7 +472,7 @@ function generateCostTips(suppliers: SupplierComparison[], peptides: PeptideSpen
 /* Summary Cards */
 .summary-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 16px;
   margin-bottom: 24px;
 }
@@ -763,7 +763,7 @@ function generateCostTips(suppliers: SupplierComparison[], peptides: PeptideSpen
 
 .tips-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 16px;
 }
 

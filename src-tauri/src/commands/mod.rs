@@ -1,6 +1,7 @@
 pub mod ai;
 pub mod analytics;
 pub mod backup;
+pub mod defaults;
 pub mod doses;
 pub mod drive;
 pub mod literature;
