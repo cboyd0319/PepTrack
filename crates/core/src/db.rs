@@ -176,6 +176,25 @@ impl StorageManager {
         Ok(protocols)
     }
 
+    pub fn get_protocol(&self, protocol_id: &str) -> Result<Option<PeptideProtocol>> {
+        let conn = self.open_connection()?;
+        let mut stmt = conn.prepare("SELECT payload FROM protocols WHERE id = ?1")?;
+        let mut rows = stmt.query([protocol_id])?;
+
+        if let Some(row) = rows.next()? {
+            let blob: Vec<u8> = row.get(0)?;
+            Ok(Some(self.decode_protocol(&blob)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get a database connection for advanced operations
+    /// WARNING: Use with caution - bypasses encryption for direct SQL access
+    pub fn connection(&self) -> Result<Connection> {
+        self.open_connection()
+    }
+
     pub fn append_dose_log(&self, log: &DoseLog) -> Result<()> {
         let conn = self.open_connection()?;
         let payload = serde_json::to_vec(log).context("Failed to serialize dose log")?;

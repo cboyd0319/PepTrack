@@ -121,6 +121,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { listProtocols, listDoseLogs, type PeptideProtocol } from '../api/peptrack';
+import { toISOString } from '../utils/dateFormatter';
 
 interface Milestone {
   day: number;
@@ -204,7 +205,7 @@ async function loadProgressData() {
       progressList.push({
         protocol,
         startDate,
-        endDate: endDate.toISOString(),
+        endDate: toISOString(endDate),
         currentDay,
         totalDays,
         dosesGiven,

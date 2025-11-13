@@ -146,8 +146,7 @@ onMounted(async () => {
 
   // Initialize notifications and start reminder service
   try {
-    const notificationsEnabled = await initializeNotifications();
-    console.log(`Notifications ${notificationsEnabled ? 'enabled' : 'disabled'}`);
+    await initializeNotifications();
 
     // Start reminder service
     reminderService.start();

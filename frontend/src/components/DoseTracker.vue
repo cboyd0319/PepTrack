@@ -195,6 +195,7 @@ import {
   type LogDosePayload,
   type PeptideProtocol,
 } from '../api/peptrack';
+import { formatDate as formatDateUtil } from '../utils/dateFormatter';
 
 // State
 const activeTab = ref<'log' | 'schedules'>('log');
@@ -241,8 +242,8 @@ async function loadDoses() {
 }
 
 async function handleLogDose() {
-  if (!form.value.protocolId || !form.value.site || form.value.amountMg <= 0) {
-    error.value = 'Please fill in all required fields.';
+  if (!form.value.protocolId || !form.value.site || form.value.amountMg <= 0 || isNaN(form.value.amountMg)) {
+    error.value = 'Please fill in all required fields with valid values.';
     return;
   }
 
@@ -290,24 +291,8 @@ function getProtocolName(protocolId: string): string {
   return protocol ? `${protocol.name} (${protocol.peptide_name})` : 'Unknown Protocol';
 }
 
-function formatDate(dateStr: string): string {
-  if (!dateStr) return "Unknown";
-
-  const normalized = dateStr.replace(" ", "T");
-  const parsed = Date.parse(normalized);
-
-  if (!Number.isNaN(parsed)) {
-    return new Date(parsed).toLocaleString();
-  }
-
-  // Some drivers return microsecond precision like 2025-11-12T01:15:00.123456+00:00
-  const truncated = normalized.split(".")[0];
-  const retry = Date.parse(`${truncated}Z`);
-  if (!Number.isNaN(retry)) {
-    return new Date(retry).toLocaleString();
-  }
-
-  return dateStr;
+function formatDate(dateStr: any): string {
+  return formatDateUtil(dateStr);
 }
 </script>
 

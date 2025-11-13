@@ -244,6 +244,7 @@ const isFormValid = computed(() => {
   return (
     form.value.protocolId &&
     form.value.amountMg > 0 &&
+    !isNaN(form.value.amountMg) &&
     form.value.timeOfDay &&
     form.value.daysOfWeek.length > 0
   );

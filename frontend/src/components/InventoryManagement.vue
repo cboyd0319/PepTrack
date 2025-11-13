@@ -385,7 +385,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import type {
   InventoryItem,
   CreateInventoryPayload,
@@ -414,6 +414,7 @@ const error = ref<string | null>(null);
 const successMessage = ref<string | null>(null);
 const editingItem = ref<InventoryItem | null>(null);
 const filterProtocolId = ref<string>('');
+let successMessageTimeout: number | null = null;
 
 const form = ref({
   protocolId: '',
@@ -517,6 +518,22 @@ async function handleSaveItem() {
     return;
   }
 
+  // Validate numeric fields for NaN
+  const numericFields = [
+    { value: form.value.costPerMg, name: 'Cost per mg' },
+    { value: form.value.quantityMg, name: 'Quantity' },
+    { value: form.value.quantityRemainingMg, name: 'Quantity remaining' },
+    { value: form.value.concentrationMgMl, name: 'Concentration' },
+    { value: form.value.lowStockThresholdMg, name: 'Low stock threshold' },
+  ];
+
+  for (const field of numericFields) {
+    if (field.value !== null && field.value !== undefined && isNaN(field.value)) {
+      error.value = `${field.name} must be a valid number`;
+      return;
+    }
+  }
+
   isSaving.value = true;
   error.value = null;
   successMessage.value = null;
@@ -568,7 +585,11 @@ async function handleSaveItem() {
     resetForm();
     await loadInventory();
 
-    setTimeout(() => {
+    // Clear any existing timeout before setting a new one
+    if (successMessageTimeout !== null) {
+      clearTimeout(successMessageTimeout);
+    }
+    successMessageTimeout = window.setTimeout(() => {
       successMessage.value = null;
     }, 3000);
   } catch (err) {
@@ -594,7 +615,11 @@ async function handleDelete(itemId: string) {
     showSuccessToast('Success', 'Inventory item deleted successfully!');
     await loadInventory();
 
-    setTimeout(() => {
+    // Clear any existing timeout before setting a new one
+    if (successMessageTimeout !== null) {
+      clearTimeout(successMessageTimeout);
+    }
+    successMessageTimeout = window.setTimeout(() => {
       successMessage.value = null;
     }, 3000);
   } catch (err) {
@@ -664,6 +689,13 @@ onMounted(async () => {
     loadSuppliers(),
     loadInventory(),
   ]);
+});
+
+onUnmounted(() => {
+  // Clean up any pending timeouts
+  if (successMessageTimeout !== null) {
+    clearTimeout(successMessageTimeout);
+  }
 });
 </script>
 

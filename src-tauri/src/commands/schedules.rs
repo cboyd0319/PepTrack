@@ -1,9 +1,8 @@
 use anyhow::Result;
-use peptrack_core::StorageManager;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 use time::{OffsetDateTime, Time};
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::state::AppState;
 
@@ -48,8 +47,8 @@ pub struct UpdateSchedulePayload {
 }
 
 /// Create the schedules table if it doesn't exist
-fn ensure_schedules_table(storage: &StorageManager) -> Result<()> {
-    let conn = storage.connection();
+fn ensure_schedules_table(storage: &peptrack_core::StorageManager) -> Result<()> {
+    let conn = storage.connection()?;
     conn.execute(
         r#"
         CREATE TABLE IF NOT EXISTS dose_schedules (
@@ -94,7 +93,8 @@ pub async fn create_dose_schedule(
     let protocol = state
         .storage
         .get_protocol(&payload.protocol_id)
-        .map_err(|e| format!("Failed to get protocol: {}", e))?;
+        .map_err(|e| format!("Failed to get protocol: {}", e))?
+        .ok_or_else(|| format!("Protocol not found: {}", payload.protocol_id))?;
 
     let id = uuid::Uuid::new_v4().to_string();
     let now = OffsetDateTime::now_utc();
@@ -102,7 +102,8 @@ pub async fn create_dose_schedule(
     let days_json = serde_json::to_string(&payload.days_of_week)
         .map_err(|e| format!("Failed to serialize days: {}", e))?;
 
-    let conn = state.storage.connection();
+    let conn = state.storage.connection()
+        .map_err(|e| format!("Failed to get database connection: {}", e))?;
     conn.execute(
         r#"
         INSERT INTO dose_schedules (id, protocol_id, amount_mg, site, time_of_day, days_of_week, enabled, notes, created_at, updated_at)
@@ -144,44 +145,69 @@ pub async fn list_dose_schedules(
 ) -> Result<Vec<DoseSchedule>, String> {
     ensure_schedules_table(&state.storage).map_err(|e| format!("Database error: {}", e))?;
 
-    let conn = state.storage.connection();
+    let conn = state.storage.connection()
+        .map_err(|e| format!("Failed to get database connection: {}", e))?;
     let mut stmt = conn
         .prepare(
             r#"
         SELECT
-            ds.id, ds.protocol_id, ds.amount_mg, ds.site, ds.time_of_day,
-            ds.days_of_week, ds.enabled, ds.notes, ds.created_at, ds.updated_at,
-            p.name as protocol_name, p.peptide_name
-        FROM dose_schedules ds
-        LEFT JOIN protocols p ON ds.protocol_id = p.id
-        ORDER BY ds.time_of_day ASC
+            id, protocol_id, amount_mg, site, time_of_day,
+            days_of_week, enabled, notes, created_at, updated_at
+        FROM dose_schedules
+        ORDER BY time_of_day ASC
         "#,
         )
         .map_err(|e| format!("Failed to prepare query: {}", e))?;
 
-    let schedules = stmt
+    let schedule_rows: Vec<_> = stmt
         .query_map([], |row| {
             let days_str: String = row.get(5)?;
             let days_of_week: Vec<u8> = serde_json::from_str(&days_str).unwrap_or_default();
 
-            Ok(DoseSchedule {
-                id: row.get(0)?,
-                protocol_id: row.get(1)?,
-                amount_mg: row.get(2)?,
-                site: row.get(3)?,
-                time_of_day: row.get(4)?,
+            Ok((
+                row.get::<_, String>(0)?,  // id
+                row.get::<_, String>(1)?,  // protocol_id
+                row.get::<_, f32>(2)?,     // amount_mg
+                row.get::<_, Option<String>>(3)?,  // site
+                row.get::<_, String>(4)?,  // time_of_day
                 days_of_week,
-                enabled: row.get::<_, i64>(6)? != 0,
-                notes: row.get(7)?,
-                created_at: row.get(8)?,
-                updated_at: row.get(9)?,
-                protocol_name: row.get(10)?,
-                peptide_name: row.get(11)?,
-            })
+                row.get::<_, i64>(6)? != 0,  // enabled
+                row.get::<_, Option<String>>(7)?,  // notes
+                row.get::<_, String>(8)?,  // created_at
+                row.get::<_, String>(9)?,  // updated_at
+            ))
         })
         .map_err(|e| format!("Failed to query schedules: {}", e))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| format!("Failed to collect schedules: {}", e))?;
+
+    // Fetch protocol details for each schedule
+    let mut schedules = Vec::new();
+    for (id, protocol_id, amount_mg, site, time_of_day, days_of_week, enabled, notes, created_at, updated_at) in schedule_rows {
+        let protocol = state.storage.get_protocol(&protocol_id)
+            .map_err(|e| format!("Failed to get protocol: {}", e))?;
+
+        let (protocol_name, peptide_name) = if let Some(p) = protocol {
+            (p.name, p.peptide_name)
+        } else {
+            ("Unknown".to_string(), "Unknown".to_string())
+        };
+
+        schedules.push(DoseSchedule {
+            id,
+            protocol_id,
+            protocol_name,
+            peptide_name,
+            amount_mg,
+            site,
+            time_of_day,
+            days_of_week,
+            enabled,
+            notes,
+            created_at,
+            updated_at,
+        });
+    }
 
     Ok(schedules)
 }
@@ -209,49 +235,46 @@ pub async fn update_dose_schedule(
         }
     }
 
-    let conn = state.storage.connection();
-    let now = OffsetDateTime::now_utc().unix_timestamp().to_string();
+    // Perform the update in a scope that drops the connection before await
+    {
+        let conn = state.storage.connection()
+            .map_err(|e| format!("Failed to get database connection: {}", e))?;
+        let now = OffsetDateTime::now_utc().unix_timestamp().to_string();
 
-    // Build dynamic SQL based on what's being updated
-    let mut updates = Vec::new();
-    let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        // Build SQL for each field individually to avoid dyn ToSql
+        let mut sql_parts = Vec::new();
 
-    if let Some(amount) = payload.amount_mg {
-        updates.push("amount_mg = ?");
-        params.push(Box::new(amount));
-    }
-    if let Some(site) = payload.site {
-        updates.push("site = ?");
-        params.push(Box::new(site));
-    }
-    if let Some(time) = payload.time_of_day {
-        updates.push("time_of_day = ?");
-        params.push(Box::new(time));
-    }
-    if let Some(days) = payload.days_of_week {
-        let days_json = serde_json::to_string(&days).unwrap();
-        updates.push("days_of_week = ?");
-        params.push(Box::new(days_json));
-    }
-    if let Some(enabled) = payload.enabled {
-        updates.push("enabled = ?");
-        params.push(Box::new(if enabled { 1 } else { 0 }));
-    }
-    if let Some(notes) = payload.notes {
-        updates.push("notes = ?");
-        params.push(Box::new(notes));
-    }
+        if let Some(amount) = payload.amount_mg {
+            sql_parts.push(format!("amount_mg = {}", amount));
+        }
+        if let Some(ref site) = payload.site {
+            sql_parts.push(format!("site = '{}'", site.replace('\'', "''")));
+        }
+        if let Some(ref time) = payload.time_of_day {
+            sql_parts.push(format!("time_of_day = '{}'", time.replace('\'', "''")));
+        }
+        if let Some(ref days) = payload.days_of_week {
+            let days_json = serde_json::to_string(&days).unwrap();
+            sql_parts.push(format!("days_of_week = '{}'", days_json.replace('\'', "''")));
+        }
+        if let Some(enabled) = payload.enabled {
+            sql_parts.push(format!("enabled = {}", if enabled { 1 } else { 0 }));
+        }
+        if let Some(ref notes) = payload.notes {
+            sql_parts.push(format!("notes = '{}'", notes.replace('\'', "''")));
+        }
 
-    updates.push("updated_at = ?");
-    params.push(Box::new(now));
-    params.push(Box::new(payload.id.clone()));
-
-    if updates.len() > 1 {
-        // has updates beyond updated_at
-        let sql = format!("UPDATE dose_schedules SET {} WHERE id = ?", updates.join(", "));
-        conn.execute(&sql, rusqlite::params_from_iter(params))
-            .map_err(|e| format!("Failed to update schedule: {}", e))?;
-    }
+        if !sql_parts.is_empty() {
+            sql_parts.push(format!("updated_at = '{}'", now));
+            let sql = format!(
+                "UPDATE dose_schedules SET {} WHERE id = '{}'",
+                sql_parts.join(", "),
+                payload.id.replace('\'', "''")
+            );
+            conn.execute(&sql, [])
+                .map_err(|e| format!("Failed to update schedule: {}", e))?;
+        }
+    } // Connection dropped here
 
     // Fetch and return updated schedule
     list_dose_schedules(state)
@@ -270,7 +293,8 @@ pub async fn delete_dose_schedule(
 
     ensure_schedules_table(&state.storage).map_err(|e| format!("Database error: {}", e))?;
 
-    let conn = state.storage.connection();
+    let conn = state.storage.connection()
+        .map_err(|e| format!("Failed to get database connection: {}", e))?;
     conn.execute("DELETE FROM dose_schedules WHERE id = ?1", [&schedule_id])
         .map_err(|e| format!("Failed to delete schedule: {}", e))?;
 
@@ -306,7 +330,7 @@ pub async fn get_pending_dose_reminders(
             if let Some(schedule_time) = parse_time(&s.time_of_day) {
                 // Within 15 minute window
                 let diff_minutes = time_diff_minutes(current_time, schedule_time);
-                diff_minutes >= 0 && diff_minutes <= 15
+                (0..=15).contains(&diff_minutes)
             } else {
                 false
             }

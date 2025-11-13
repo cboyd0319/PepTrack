@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, withDefaults } from 'vue';
+import { ref } from 'vue';
 import type { PeptideProtocol } from "../api/peptrack";
 import { populateDefaultPeptides } from "../api/peptrack";
 import { showSuccessToast, showErrorToast } from "../utils/errorHandling";
@@ -74,7 +74,7 @@ async function handleLoadDefaults() {
           <span>{{ protocol.peptide_name }}</span>
           <span>
             Last updated:
-            {{ new Date(protocol.updated_at).toLocaleDateString() }}
+            {{ protocol.updated_at ? new Date(protocol.updated_at).toLocaleDateString() : 'N/A' }}
           </span>
         </div>
         <p class="protocol-notes" v-if="protocol.notes">

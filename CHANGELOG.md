@@ -5,7 +5,59 @@ All notable changes to PepTrack will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2025-11-11
+## [Unreleased] - 2025-11-12
+
+### Fixed
+
+#### Runtime Error Fixes
+- **Date Handling**: Fixed "Invalid Date" errors when parsing Rust OffsetDateTime arrays
+  - Created comprehensive `dateFormatter.ts` utility to handle multiple date formats from backend
+  - Fixed RecentActivityTimeline.vue using raw Rust time arrays instead of ISO strings
+  - Added proper Vue Proxy unwrapping for reactive date arrays
+  - Updated DoseCalendarHeatmap.vue, ProtocolProgressTracker.vue, and RecentActivityTimeline.vue to use new formatters
+
+- **Division by Zero**: Fixed multiple division-by-zero bugs in CostAnalysisDashboard.vue
+  - Added check for `totalSpent > 0` before calculating percentages (line 291)
+  - Fixed supplier rating calculation to handle empty arrays and zero range (lines 318-329)
+  - Added `avgPrices.length > 0` checks before `Math.min()/Math.max()` operations
+
+- **NaN Validation**: Added proper validation for numeric inputs across all forms
+  - DoseTracker.vue: Validates `amountMg` is not NaN before submission
+  - InventoryManagement.vue: Validates all numeric fields (cost, quantity, concentration)
+  - DoseScheduleManager.vue: Added NaN check to form validation
+
+- **Null Safety**: Added null checks for potentially undefined values
+  - ProtocolList.vue: Safe handling of `protocol.updated_at` which may be null
+  - Dashboard.vue: Improved error handling with user-facing toast notifications
+
+- **Memory Leaks**: Fixed timeout cleanup in InventoryManagement.vue
+  - Added `onUnmounted` hook to clear pending timeouts
+  - Prevents overlapping timeouts from rapid save/delete operations
+
+#### Backend Fixes
+- **Rust Compilation**: Fixed all compilation errors in schedules feature
+  - Added missing `get_protocol()` and `connection()` methods to StorageManager
+  - Fixed SQL queries to avoid joining encrypted protocol data
+  - Added `rusqlite = "0.32.1"` dependency to src-tauri/Cargo.toml
+  - Fixed `current_vial_status` field initialization in defaults.rs
+  - Resolved "Future not Send" error by rewriting schedule update logic
+
+- **Tauri Permissions**: Added notification permissions to tauri.conf.json
+  - Fixed "notification.is_permission_granted not allowed" errors
+  - Added proper capabilities configuration for main window
+
+### Changed
+
+#### Data Quality Improvements
+- **Fake Data Removal**: Replaced simulated data with real calculations in CostAnalysisDashboard.vue
+  - Trend calculation now compares actual current period vs previous period spending
+  - Timeline now uses real purchase dates from inventory instead of random values
+  - Removed misleading random trend generation (lines 229-235)
+
+- **Logging**: Improved production logging
+  - Removed console.log from App.vue
+  - Converted useReminderService.ts logs to conditional `debugLog()` (dev-only)
+  - Preserved console.error/warn for actual errors
 
 ### Fixed
 - **TypeScript Type Safety**: Fixed 4 TypeScript errors in `PriceChart.vue`

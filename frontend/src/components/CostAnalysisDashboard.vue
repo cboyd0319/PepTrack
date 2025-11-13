@@ -224,10 +224,27 @@ const supplierComparison = ref<SupplierComparison[]>([]);
 const timelineData = ref<TimelinePoint[]>([]);
 const costTips = ref<CostTip[]>([]);
 
+const previousPeriodSpent = ref(0);
+
 const spendingTrend = computed(() => {
-  // Calculate trend (simplified - would compare with previous period in real implementation)
-  const trend = Math.random() > 0.5 ? 'up' : 'down';
-  const percentage = Math.floor(Math.random() * 20);
+  // Calculate actual trend comparing current period to previous period
+  if (previousPeriodSpent.value === 0) {
+    return {
+      text: 'No previous data',
+      class: 'no-trend',
+    };
+  }
+
+  const difference = totalSpent.value - previousPeriodSpent.value;
+  const percentage = Math.abs(Math.round((difference / previousPeriodSpent.value) * 100));
+  const trend = difference > 0 ? 'up' : difference < 0 ? 'down' : 'same';
+
+  if (trend === 'same') {
+    return {
+      text: '→ No change',
+      class: 'no-trend',
+    };
+  }
 
   return {
     text: trend === 'up' ? `↑ ${percentage}% vs last period` : `↓ ${percentage}% vs last period`,
@@ -288,7 +305,7 @@ async function loadCostData() {
         name,
         cost: data.cost,
         quantity: data.quantity,
-        percentage: (data.cost / totalSpent.value) * 100,
+        percentage: totalSpent.value > 0 ? (data.cost / totalSpent.value) * 100 : 0,
       }))
       .sort((a, b) => b.cost - a.cost);
 
@@ -315,16 +332,18 @@ async function loadCostData() {
 
     // Determine ratings
     const avgPrices = supplierData.map(s => s.avgPrice).filter(p => p > 0);
-    const minPrice = Math.min(...avgPrices);
-    const maxPrice = Math.max(...avgPrices);
+    const minPrice = avgPrices.length > 0 ? Math.min(...avgPrices) : 0;
+    const maxPrice = avgPrices.length > 0 ? Math.max(...avgPrices) : 0;
     const range = maxPrice - minPrice;
 
     supplierComparison.value = supplierData
       .map(s => {
         let rating: 'best' | 'good' | 'average' | 'expensive' = 'average';
-        if (s.avgPrice === minPrice) rating = 'best';
-        else if (s.avgPrice < minPrice + range * 0.33) rating = 'good';
-        else if (s.avgPrice > maxPrice - range * 0.33) rating = 'expensive';
+        if (avgPrices.length > 0 && range > 0) {
+          if (s.avgPrice === minPrice) rating = 'best';
+          else if (s.avgPrice < minPrice + range * 0.33) rating = 'good';
+          else if (s.avgPrice > maxPrice - range * 0.33) rating = 'expensive';
+        }
 
         return { ...s, rating };
       })
@@ -332,23 +351,55 @@ async function loadCostData() {
 
     cheapestSupplier.value = supplierComparison.value[0]?.name || 'N/A';
 
-    // Generate timeline data (last 6 months)
+    // Generate timeline data (last 6 months) with real spending data
     const monthsToShow = Math.min(6, Math.floor(selectedPeriod.value / 30));
     const timelinePoints: TimelinePoint[] = [];
+    const now = new Date();
 
+    // Initialize months with zero spending
     for (let i = monthsToShow - 1; i >= 0; i--) {
-      const date = new Date();
-      date.setMonth(date.getMonth() - i);
+      const date = new Date(now);
+      date.setMonth(now.getMonth() - i);
       const label = date.toLocaleDateString('en-US', { month: 'short' });
-      const amount = Math.random() * totalSpent.value / monthsToShow; // Simplified
-      timelinePoints.push({ label, amount, percentage: 0 });
+      timelinePoints.push({ label, amount: 0, percentage: 0 });
     }
 
-    const maxAmount = Math.max(...timelinePoints.map(p => p.amount));
+    // Calculate actual spending per month from inventory purchases
+    inventory.forEach(item => {
+      if (item.purchase_date && item.cost_per_mg && item.quantity_mg) {
+        const purchaseDate = new Date(item.purchase_date);
+        const monthsAgo = Math.floor((now.getTime() - purchaseDate.getTime()) / (1000 * 60 * 60 * 24 * 30));
+
+        if (monthsAgo >= 0 && monthsAgo < monthsToShow) {
+          const index = monthsToShow - 1 - monthsAgo;
+          if (index >= 0 && index < timelinePoints.length) {
+            timelinePoints[index].amount += item.cost_per_mg * item.quantity_mg;
+          }
+        }
+      }
+    });
+
+    const maxAmount = Math.max(...timelinePoints.map(p => p.amount), 1);
     timelineData.value = timelinePoints.map(p => ({
       ...p,
       percentage: maxAmount > 0 ? (p.amount / maxAmount) * 100 : 0,
     }));
+
+    // Calculate previous period spending for trend
+    const previousPeriodStart = new Date(now);
+    previousPeriodStart.setDate(now.getDate() - (selectedPeriod.value * 2));
+    const previousPeriodEnd = new Date(now);
+    previousPeriodEnd.setDate(now.getDate() - selectedPeriod.value);
+
+    previousPeriodSpent.value = inventory
+      .filter(item => {
+        if (!item.purchase_date) return false;
+        const purchaseDate = new Date(item.purchase_date);
+        return purchaseDate >= previousPeriodStart && purchaseDate < previousPeriodEnd;
+      })
+      .reduce((sum, item) => {
+        return sum + ((item.cost_per_mg || 0) * (item.quantity_mg || 0));
+      }, 0);
 
     // Generate cost optimization tips
     generateCostTips(supplierComparison.value, peptideSpending.value);

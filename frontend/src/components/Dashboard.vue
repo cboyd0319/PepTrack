@@ -335,7 +335,9 @@ async function loadData() {
       supplierStore.fetchInventory(),
     ]);
   } catch (error) {
-    // Errors are handled by individual stores
+    // Errors are handled by individual stores, but show a general notification
+    console.error('Failed to load dashboard data:', error);
+    showErrorToast(error, { operation: 'load dashboard data' });
   }
 }
 

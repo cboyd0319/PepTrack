@@ -100,6 +100,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { listProtocols, listDoseLogs, type PeptideProtocol, type DoseLog } from '../api/peptrack';
+import { toDateString } from '../utils/dateFormatter';
 
 interface DayData {
   date: string;
@@ -214,7 +215,7 @@ async function loadDoseData() {
 
     // Count doses per day
     filteredDoses.forEach(dose => {
-      const dateStr = dose.logged_at.split('T')[0]!;
+      const dateStr = toDateString(dose.logged_at);
       if (daysMap.has(dateStr)) {
         daysMap.set(dateStr, (daysMap.get(dateStr) || 0) + 1);
       }
@@ -263,7 +264,7 @@ function calculateStats(doses: DoseLog[]) {
   stats.value.totalDoses = doses.length;
 
   // Calculate streaks
-  const doseDates = new Set(doses.map(d => d.logged_at.split('T')[0]));
+  const doseDates = new Set(doses.map(d => toDateString(d.logged_at)));
   let currentStreak = 0;
   let longestStreak = 0;
   let streak = 0;

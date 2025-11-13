@@ -89,6 +89,7 @@ import {
   listInventory,
   listProtocols,
 } from '../api/peptrack';
+import { toISOString, toDateString } from '../utils/dateFormatter';
 
 type ActivityType = 'dose' | 'inventory' | 'protocol' | 'alert' | 'backup';
 
@@ -138,7 +139,7 @@ const groupedActivities = computed<ActivityGroup[]>(() => {
     } else if (date.getTime() === yesterday.getTime()) {
       dateKey = 'yesterday';
     } else {
-      dateKey = date.toISOString().split('T')[0]!;
+      dateKey = toDateString(date);
     }
 
     if (!groups.has(dateKey)) {
@@ -191,7 +192,7 @@ async function loadActivity() {
           description: protocol
             ? `${protocol.name} - ${dose.amount_mg}mcg`
             : `Dose of ${dose.amount_mg}mcg`,
-          timestamp: dose.logged_at,
+          timestamp: toISOString(dose.logged_at),
           metadata: {
             Amount: `${dose.amount_mg}mcg`,
             ...(dose.site && { Site: dose.site }),
@@ -210,7 +211,7 @@ async function loadActivity() {
           type: 'inventory',
           title: 'Inventory Added',
           description: `${peptideName} - ${item.quantity_mg || 0}mg`,
-          timestamp: item.purchase_date || item.created_at || new Date().toISOString(),
+          timestamp: toISOString(item.purchase_date || item.created_at),
           metadata: {
             Quantity: `${item.quantity_mg || 0}mg`,
             ...(item.cost_per_mg && { Cost: `$${item.cost_per_mg}/mg` }),
@@ -227,7 +228,7 @@ async function loadActivity() {
           type: 'protocol',
           title: 'Protocol Created',
           description: `${protocol.name} - ${protocol.peptide_name}`,
-          timestamp: protocol.created_at || new Date().toISOString(),
+          timestamp: toISOString(protocol.created_at),
           metadata: {
             Peptide: protocol.peptide_name,
             ...(protocol.target_concentration_mg_ml && {

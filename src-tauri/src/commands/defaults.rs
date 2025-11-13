@@ -1,4 +1,3 @@
-use peptrack_core::StorageManager;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use tracing::info;
@@ -52,6 +51,7 @@ pub async fn populate_default_peptides(
                 "{}\n\nTypical dose range: {}",
                 peptide.notes, peptide.typical_dose_range
             )),
+            current_vial_status: None,
             target_concentration_mg_ml: None,
             created_at: time::OffsetDateTime::now_utc(),
             updated_at: time::OffsetDateTime::now_utc(),

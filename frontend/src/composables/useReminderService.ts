@@ -5,6 +5,15 @@ import { showNotification, NotificationPresets } from '../utils/notifications';
 export interface ReminderServiceConfig {
   checkIntervalMinutes?: number; // How often to check for reminders (default: 5 minutes)
   enabled?: boolean; // Whether the service is enabled (default: true)
+  debug?: boolean; // Enable debug logging (default: false)
+}
+
+const DEBUG = import.meta.env.DEV; // Only log in development mode
+
+function debugLog(...args: any[]) {
+  if (DEBUG) {
+    console.log('[ReminderService]', ...args);
+  }
 }
 
 export function useReminderService(config: ReminderServiceConfig = {}) {
@@ -27,7 +36,7 @@ export function useReminderService(config: ReminderServiceConfig = {}) {
       const pendingReminders = await getPendingDoseReminders();
 
       if (pendingReminders.length > 0) {
-        console.log(`[ReminderService] Found ${pendingReminders.length} pending reminders`);
+        debugLog(`Found ${pendingReminders.length} pending reminders`);
 
         for (const reminder of pendingReminders) {
           // Check if we've already notified for this schedule in this time window
@@ -65,7 +74,7 @@ export function useReminderService(config: ReminderServiceConfig = {}) {
 
       await showNotification(notification);
 
-      console.log(`[ReminderService] Sent notification for ${schedule.protocolName}`);
+      debugLog(`Sent notification for ${schedule.protocolName}`);
     } catch (error) {
       console.error('[ReminderService] Error sending notification:', error);
     }
@@ -78,11 +87,11 @@ export function useReminderService(config: ReminderServiceConfig = {}) {
     }
 
     if (!enabled) {
-      console.log('[ReminderService] Service is disabled');
+      debugLog('Service is disabled');
       return;
     }
 
-    console.log(`[ReminderService] Starting reminder service (checking every ${checkIntervalMinutes} minutes)`);
+    debugLog(`Starting reminder service (checking every ${checkIntervalMinutes} minutes)`);
     isRunning.value = true;
 
     // Check immediately on start
@@ -99,7 +108,7 @@ export function useReminderService(config: ReminderServiceConfig = {}) {
       return;
     }
 
-    console.log('[ReminderService] Stopping reminder service');
+    debugLog('Stopping reminder service');
     isRunning.value = false;
 
     if (intervalId !== null) {
