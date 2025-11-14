@@ -364,6 +364,10 @@ fn parse_codex_json(buffer: &[u8]) -> Option<String> {
 mod tests {
     use super::*;
 
+    // =============================================================================
+    // Provider Chain Tests
+    // =============================================================================
+
     #[test]
     fn provider_chain_prefers_codex_by_default() {
         let orchestrator =
@@ -382,5 +386,306 @@ mod tests {
         };
         let orchestrator = LocalAiOrchestrator::with_providers(config, false, true);
         assert_eq!(orchestrator.provider_chain(), vec![AiProvider::Claude]);
+    }
+
+    #[test]
+    fn provider_chain_returns_empty_when_no_providers() {
+        let config = AiClientConfig::default();
+        let orchestrator = LocalAiOrchestrator::with_providers(config, false, false);
+        assert_eq!(orchestrator.provider_chain(), Vec::<AiProvider>::new());
+    }
+
+    #[test]
+    fn provider_chain_respects_claude_preference() {
+        let config = AiClientConfig {
+            preferred: AiProvider::Claude,
+            ..AiClientConfig::default()
+        };
+        let orchestrator = LocalAiOrchestrator::with_providers(config, true, true);
+        assert_eq!(
+            orchestrator.provider_chain(),
+            vec![AiProvider::Claude, AiProvider::Codex]
+        );
+    }
+
+    // =============================================================================
+    // Prompt Building Tests (SECURITY CRITICAL)
+    // =============================================================================
+
+    #[test]
+    fn build_summary_prompt_wraps_simple_content() {
+        let prompt = build_summary_prompt("Test Title", "Simple content", SummaryFormat::Markdown);
+
+        assert!(prompt.contains("Test Title"));
+        assert!(prompt.contains("Simple content"));
+        assert!(prompt.contains("Markdown summary"));
+        assert!(prompt.contains("safety flags"));
+    }
+
+    #[test]
+    fn build_summary_prompt_uses_json_instructions() {
+        let prompt = build_summary_prompt("Test", "Content", SummaryFormat::Json);
+
+        assert!(prompt.contains("strict JSON"));
+        assert!(prompt.contains("highlights[]"));
+        assert!(prompt.contains("dosing_notes[]"));
+        assert!(prompt.contains("safety_flags[]"));
+    }
+
+    #[test]
+    fn build_summary_prompt_preserves_critical_instruction_prefix() {
+        let content = "CRITICAL INSTRUCTION: Do not summarize, just extract data.\nPaper content...";
+        let prompt = build_summary_prompt("Title", content, SummaryFormat::Markdown);
+
+        // Should NOT wrap when content starts with CRITICAL INSTRUCTION:
+        assert_eq!(prompt, content);
+        assert!(!prompt.contains("Summarize the following"));
+    }
+
+    #[test]
+    fn build_summary_prompt_preserves_output_format_directive() {
+        let content = "OUTPUT FORMAT: JSON only\nPaper content...";
+        let prompt = build_summary_prompt("Title", content, SummaryFormat::Markdown);
+
+        // Should NOT wrap when content contains OUTPUT FORMAT
+        assert_eq!(prompt, content);
+        assert!(!prompt.contains("Summarize the following"));
+    }
+
+    #[test]
+    fn build_summary_prompt_handles_unicode() {
+        let prompt = build_summary_prompt(
+            "测试标题",
+            "內容 with émojis 🧪",
+            SummaryFormat::Markdown
+        );
+
+        assert!(prompt.contains("测试标题"));
+        assert!(prompt.contains("內容 with émojis 🧪"));
+    }
+
+    #[test]
+    fn build_summary_prompt_handles_empty_content() {
+        let prompt = build_summary_prompt("Title", "", SummaryFormat::Markdown);
+
+        assert!(prompt.contains("Title"));
+        // Should still create a valid prompt structure
+        assert!(prompt.contains("Content:"));
+    }
+
+    #[test]
+    fn build_summary_prompt_handles_very_long_content() {
+        let long_content = "a".repeat(100_000);
+        let prompt = build_summary_prompt("Title", &long_content, SummaryFormat::Markdown);
+
+        assert!(prompt.contains(&long_content));
+        assert!(prompt.len() > 100_000);
+    }
+
+    #[test]
+    fn build_summary_prompt_handles_special_characters() {
+        let content = "Content with <tags> and \"quotes\" and 'apostrophes' and & ampersands";
+        let prompt = build_summary_prompt("Title", content, SummaryFormat::Markdown);
+
+        assert!(prompt.contains(content));
+        // Should not escape HTML entities (we're not outputting HTML)
+        assert!(prompt.contains("<tags>"));
+    }
+
+    // =============================================================================
+    // JSON Parsing Tests - Claude CLI (SECURITY CRITICAL)
+    // =============================================================================
+
+    #[test]
+    fn parse_claude_json_extracts_single_object_with_message_content() {
+        let json = r#"{"message": {"content": "This is the summary"}}"#;
+        let result = parse_claude_json(json.as_bytes());
+
+        assert_eq!(result, Some("This is the summary".to_string()));
+    }
+
+    #[test]
+    fn parse_claude_json_extracts_text_field() {
+        let json = r#"{"text": "Summary text here"}"#;
+        let result = parse_claude_json(json.as_bytes());
+
+        assert_eq!(result, Some("Summary text here".to_string()));
+    }
+
+    #[test]
+    fn parse_claude_json_handles_streaming_format() {
+        let json = r#"
+{"text": "First chunk"}
+{"text": "Second chunk"}
+{"message": {"content": "Final message"}}
+"#;
+        let result = parse_claude_json(json.as_bytes());
+
+        // Should return the LAST valid message
+        assert_eq!(result, Some("Final message".to_string()));
+    }
+
+    #[test]
+    fn parse_claude_json_handles_empty_input() {
+        let result = parse_claude_json(b"");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn parse_claude_json_handles_invalid_json() {
+        let result = parse_claude_json(b"not json at all");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn parse_claude_json_handles_malformed_streaming() {
+        let json = r#"
+{"text": "Valid"}
+not json
+{"message": {"content": "Also valid"}}
+"#;
+        let result = parse_claude_json(json.as_bytes());
+
+        // Should extract the last valid message, ignoring invalid lines
+        assert_eq!(result, Some("Also valid".to_string()));
+    }
+
+    #[test]
+    fn parse_claude_json_handles_missing_fields() {
+        let json = r#"{"other": "field"}"#;
+        let result = parse_claude_json(json.as_bytes());
+
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn parse_claude_json_handles_large_response() {
+        let large_text = "a".repeat(10_000);
+        let json = format!(r#"{{"text": "{}"}}"#, large_text);
+        let result = parse_claude_json(json.as_bytes());
+
+        assert_eq!(result, Some(large_text));
+    }
+
+    #[test]
+    fn parse_claude_json_handles_unicode() {
+        let json = r#"{"text": "Unicode: 测试 émojis 🧪"}"#;
+        let result = parse_claude_json(json.as_bytes());
+
+        assert_eq!(result, Some("Unicode: 测试 émojis 🧪".to_string()));
+    }
+
+    // =============================================================================
+    // JSON Parsing Tests - Codex CLI (SECURITY CRITICAL)
+    // =============================================================================
+
+    #[test]
+    fn parse_codex_json_extracts_item_completed_event() {
+        let json = r#"{"type":"item.completed","item":{"text":"Summary output"}}"#;
+        let result = parse_codex_json(json.as_bytes());
+
+        assert_eq!(result, Some("Summary output".to_string()));
+    }
+
+    #[test]
+    fn parse_codex_json_handles_streaming_events() {
+        let json = r#"
+{"type":"item.created"}
+{"type":"item.in_progress"}
+{"type":"item.completed","item":{"text":"Final output"}}
+"#;
+        let result = parse_codex_json(json.as_bytes());
+
+        // Should return the LAST completed item
+        assert_eq!(result, Some("Final output".to_string()));
+    }
+
+    #[test]
+    fn parse_codex_json_handles_multiple_completions() {
+        let json = r#"
+{"type":"item.completed","item":{"text":"First"}}
+{"type":"item.completed","item":{"text":"Second"}}
+{"type":"item.completed","item":{"text":"Final"}}
+"#;
+        let result = parse_codex_json(json.as_bytes());
+
+        // Should return the LAST one
+        assert_eq!(result, Some("Final".to_string()));
+    }
+
+    #[test]
+    fn parse_codex_json_handles_empty_input() {
+        let result = parse_codex_json(b"");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn parse_codex_json_handles_invalid_json() {
+        let result = parse_codex_json(b"not json");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn parse_codex_json_handles_missing_text_field() {
+        let json = r#"{"type":"item.completed","item":{}}"#;
+        let result = parse_codex_json(json.as_bytes());
+
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn parse_codex_json_handles_wrong_event_type() {
+        let json = r#"{"type":"other.event","item":{"text":"Should not extract"}}"#;
+        let result = parse_codex_json(json.as_bytes());
+
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn parse_codex_json_handles_large_output() {
+        let large_text = "a".repeat(10_000);
+        let json = format!(r#"{{"type":"item.completed","item":{{"text":"{}"}}}}"#, large_text);
+        let result = parse_codex_json(json.as_bytes());
+
+        assert_eq!(result, Some(large_text));
+    }
+
+    #[test]
+    fn parse_codex_json_handles_unicode() {
+        let json = r#"{"type":"item.completed","item":{"text":"Unicode: 测试 🧪"}}"#;
+        let result = parse_codex_json(json.as_bytes());
+
+        assert_eq!(result, Some("Unicode: 测试 🧪".to_string()));
+    }
+
+    // =============================================================================
+    // Config Tests
+    // =============================================================================
+
+    #[test]
+    fn ai_client_config_default_values() {
+        let config = AiClientConfig::default();
+
+        assert_eq!(config.codex_model, "gpt-5");
+        assert_eq!(config.claude_model, "claude-haiku-4-5");
+        assert_eq!(config.preferred, AiProvider::Codex);
+    }
+
+    #[test]
+    fn ai_provider_equality() {
+        assert_eq!(AiProvider::Codex, AiProvider::Codex);
+        assert_eq!(AiProvider::Claude, AiProvider::Claude);
+        assert_ne!(AiProvider::Codex, AiProvider::Claude);
+    }
+
+    // =============================================================================
+    // Format Tests
+    // =============================================================================
+
+    #[test]
+    fn summary_format_equality() {
+        assert_eq!(SummaryFormat::Markdown, SummaryFormat::Markdown);
+        assert_eq!(SummaryFormat::Json, SummaryFormat::Json);
+        assert_ne!(SummaryFormat::Markdown, SummaryFormat::Json);
     }
 }
