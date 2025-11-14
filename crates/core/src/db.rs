@@ -740,11 +740,12 @@ pub fn now_timestamp() -> OffsetDateTime {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{models::PeptideProtocol, StaticKeyProvider};
+    use crate::models::*;
+    use crate::StaticKeyProvider;
     use tempfile::tempdir;
 
-    #[test]
-    fn upsert_and_list_protocols_roundtrips() {
+    // Test helper to create a storage manager with a temp database
+    fn create_test_storage() -> StorageManager {
         let tmp = tempdir().expect("tempdir");
         let key_provider =
             Arc::new(StaticKeyProvider::new(vec![7u8; 32]).expect("static key provider"));
@@ -755,6 +756,16 @@ mod tests {
         })
         .expect("storage manager");
         storage.initialize().expect("init db");
+        storage
+    }
+
+    // =============================================================================
+    // Protocol CRUD Tests
+    // =============================================================================
+
+    #[test]
+    fn upsert_and_list_protocols_roundtrips() {
+        let storage = create_test_storage();
 
         let mut protocol = PeptideProtocol::new("Protocol A", "BPC-157");
         protocol.notes = Some("store at 4C".into());
@@ -765,5 +776,604 @@ mod tests {
         assert_eq!(fetched.len(), 1);
         assert_eq!(fetched[0].name, "Protocol A");
         assert_eq!(fetched[0].notes.as_deref(), Some("store at 4C"));
+    }
+
+    #[test]
+    fn list_protocols_returns_empty_for_new_database() {
+        let storage = create_test_storage();
+        let protocols = storage.list_protocols().expect("list");
+        assert_eq!(protocols.len(), 0);
+    }
+
+    #[test]
+    fn get_protocol_returns_none_for_nonexistent_id() {
+        let storage = create_test_storage();
+        let result = storage
+            .get_protocol("nonexistent-id")
+            .expect("get protocol");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn get_protocol_returns_existing_protocol() {
+        let storage = create_test_storage();
+        let protocol = PeptideProtocol::new("Morning Stack", "TB-500");
+        storage.upsert_protocol(&protocol).expect("upsert");
+
+        let fetched = storage.get_protocol(&protocol.id).expect("get protocol");
+        assert!(fetched.is_some());
+        let fetched = fetched.unwrap();
+        assert_eq!(fetched.id, protocol.id);
+        assert_eq!(fetched.name, "Morning Stack");
+    }
+
+    #[test]
+    fn upsert_protocol_updates_existing_protocol() {
+        let storage = create_test_storage();
+        let mut protocol = PeptideProtocol::new("Original Name", "BPC-157");
+        storage.upsert_protocol(&protocol).expect("upsert");
+
+        // Update the protocol
+        protocol.name = "Updated Name".to_string();
+        protocol.notes = Some("New notes".to_string());
+        storage.upsert_protocol(&protocol).expect("upsert updated");
+
+        let fetched = storage.list_protocols().expect("list");
+        assert_eq!(fetched.len(), 1);
+        assert_eq!(fetched[0].name, "Updated Name");
+        assert_eq!(fetched[0].notes.as_deref(), Some("New notes"));
+    }
+
+    // =============================================================================
+    // Dose Log Tests
+    // =============================================================================
+
+    #[test]
+    fn append_dose_log_and_list_roundtrips() {
+        let storage = create_test_storage();
+        let protocol = PeptideProtocol::new("Test Protocol", "BPC-157");
+        storage.upsert_protocol(&protocol).expect("upsert protocol");
+
+        let dose = DoseLog::new(&protocol.id, "Left Shoulder", 0.5);
+        storage.append_dose_log(&dose).expect("append dose");
+
+        let doses = storage.list_dose_logs().expect("list doses");
+        assert_eq!(doses.len(), 1);
+        assert_eq!(doses[0].site, "Left Shoulder");
+        assert_eq!(doses[0].amount_mg, 0.5);
+    }
+
+    #[test]
+    fn list_dose_logs_for_protocol_filters_correctly() {
+        let storage = create_test_storage();
+        let protocol1 = PeptideProtocol::new("Protocol 1", "BPC-157");
+        let protocol2 = PeptideProtocol::new("Protocol 2", "TB-500");
+        storage.upsert_protocol(&protocol1).expect("upsert protocol1");
+        storage.upsert_protocol(&protocol2).expect("upsert protocol2");
+
+        let dose1 = DoseLog::new(&protocol1.id, "Site A", 0.5);
+        let dose2 = DoseLog::new(&protocol2.id, "Site B", 1.0);
+        let dose3 = DoseLog::new(&protocol1.id, "Site C", 0.75);
+
+        storage.append_dose_log(&dose1).expect("append dose1");
+        storage.append_dose_log(&dose2).expect("append dose2");
+        storage.append_dose_log(&dose3).expect("append dose3");
+
+        let doses_for_p1 = storage
+            .list_dose_logs_for_protocol(&protocol1.id)
+            .expect("list doses for protocol1");
+        assert_eq!(doses_for_p1.len(), 2);
+        assert!(doses_for_p1.iter().all(|d| d.protocol_id == protocol1.id));
+    }
+
+    #[test]
+    fn delete_dose_log_removes_log() {
+        let storage = create_test_storage();
+        let protocol = PeptideProtocol::new("Test Protocol", "BPC-157");
+        storage.upsert_protocol(&protocol).expect("upsert protocol");
+
+        let dose = DoseLog::new(&protocol.id, "Site", 0.5);
+        let dose_id = dose.id.clone();
+        storage.append_dose_log(&dose).expect("append dose");
+
+        storage.delete_dose_log(&dose_id).expect("delete dose");
+
+        let doses = storage.list_dose_logs().expect("list doses");
+        assert_eq!(doses.len(), 0);
+    }
+
+    #[test]
+    fn delete_dose_log_with_nonexistent_id_succeeds() {
+        let storage = create_test_storage();
+        // Deleting a non-existent dose should not error (SQL DELETE with no matches)
+        storage
+            .delete_dose_log("nonexistent-id")
+            .expect("delete nonexistent");
+    }
+
+    // =============================================================================
+    // Literature Cache Tests
+    // =============================================================================
+
+    #[test]
+    fn cache_literature_and_list_roundtrips() {
+        let storage = create_test_storage();
+        let mut entry = LiteratureEntry::new("pubmed", "BPC-157 Research Paper");
+        entry.url = Some("https://pubmed.ncbi.nlm.nih.gov/12345/".to_string());
+        entry.summary = Some("This paper discusses BPC-157.".to_string());
+
+        storage.cache_literature(&entry).expect("cache literature");
+
+        let entries = storage.list_literature().expect("list literature");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].title, "BPC-157 Research Paper");
+        assert_eq!(entries[0].source, "pubmed");
+    }
+
+    #[test]
+    fn search_literature_finds_matching_entries() {
+        let storage = create_test_storage();
+        let entry1 = LiteratureEntry::new("pubmed", "BPC-157 and Wound Healing");
+        let entry2 = LiteratureEntry::new("openalex", "TB-500 Clinical Study");
+        let entry3 = LiteratureEntry::new("pubmed", "GHK-Cu Peptide Research");
+
+        storage.cache_literature(&entry1).expect("cache");
+        storage.cache_literature(&entry2).expect("cache");
+        storage.cache_literature(&entry3).expect("cache");
+
+        let results = storage.search_literature("BPC-157").expect("search");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].title, "BPC-157 and Wound Healing");
+    }
+
+    #[test]
+    fn search_literature_returns_empty_for_no_matches() {
+        let storage = create_test_storage();
+        let entry = LiteratureEntry::new("pubmed", "Some Paper");
+        storage.cache_literature(&entry).expect("cache");
+
+        let results = storage.search_literature("nonexistent").expect("search");
+        assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn search_literature_is_case_insensitive() {
+        let storage = create_test_storage();
+        let entry = LiteratureEntry::new("pubmed", "BPC-157 Research");
+        storage.cache_literature(&entry).expect("cache");
+
+        let results = storage.search_literature("bpc-157").expect("search");
+        assert_eq!(results.len(), 1);
+    }
+
+    // =============================================================================
+    // Supplier Tests
+    // =============================================================================
+
+    #[test]
+    fn upsert_supplier_and_list_roundtrips() {
+        let storage = create_test_storage();
+        let mut supplier = Supplier::new("PeptideSource");
+        supplier.website = Some("https://peptidesource.com".to_string());
+        supplier.contact_email = Some("contact@peptidesource.com".to_string());
+
+        storage.upsert_supplier(&supplier).expect("upsert supplier");
+
+        let suppliers = storage.list_suppliers().expect("list suppliers");
+        assert_eq!(suppliers.len(), 1);
+        assert_eq!(suppliers[0].name, "PeptideSource");
+        assert_eq!(
+            suppliers[0].website.as_deref(),
+            Some("https://peptidesource.com")
+        );
+    }
+
+    #[test]
+    fn get_supplier_returns_existing_supplier() {
+        let storage = create_test_storage();
+        let supplier = Supplier::new("TestSupplier");
+        storage.upsert_supplier(&supplier).expect("upsert");
+
+        let fetched = storage.get_supplier(&supplier.id).expect("get supplier");
+        assert!(fetched.is_some());
+        assert_eq!(fetched.unwrap().name, "TestSupplier");
+    }
+
+    #[test]
+    fn get_supplier_returns_none_for_nonexistent_id() {
+        let storage = create_test_storage();
+        let result = storage.get_supplier("nonexistent").expect("get supplier");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn delete_supplier_removes_supplier() {
+        let storage = create_test_storage();
+        let supplier = Supplier::new("ToDelete");
+        let supplier_id = supplier.id.clone();
+        storage.upsert_supplier(&supplier).expect("upsert");
+
+        storage.delete_supplier(&supplier_id).expect("delete");
+
+        let suppliers = storage.list_suppliers().expect("list");
+        assert_eq!(suppliers.len(), 0);
+    }
+
+    // =============================================================================
+    // Inventory Tests
+    // =============================================================================
+
+    #[test]
+    fn upsert_inventory_item_and_list_roundtrips() {
+        let storage = create_test_storage();
+        let protocol = PeptideProtocol::new("Test", "BPC-157");
+        storage.upsert_protocol(&protocol).expect("upsert protocol");
+
+        let mut item = InventoryItem::new(&protocol.id);
+        item.vial_status = VialStatus::Opened;
+        item.quantity_mg = Some(10.0);
+        item.batch_number = Some("BATCH123".to_string());
+
+        storage.upsert_inventory_item(&item).expect("upsert item");
+
+        let items = storage.list_inventory().expect("list inventory");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].batch_number.as_deref(), Some("BATCH123"));
+    }
+
+    #[test]
+    fn list_inventory_by_protocol_filters_correctly() {
+        let storage = create_test_storage();
+        let protocol1 = PeptideProtocol::new("P1", "BPC-157");
+        let protocol2 = PeptideProtocol::new("P2", "TB-500");
+        storage.upsert_protocol(&protocol1).expect("upsert");
+        storage.upsert_protocol(&protocol2).expect("upsert");
+
+        let item1 = InventoryItem::new(&protocol1.id);
+        let item2 = InventoryItem::new(&protocol2.id);
+        let item3 = InventoryItem::new(&protocol1.id);
+
+        storage.upsert_inventory_item(&item1).expect("upsert");
+        storage.upsert_inventory_item(&item2).expect("upsert");
+        storage.upsert_inventory_item(&item3).expect("upsert");
+
+        let items_for_p1 = storage
+            .list_inventory_by_protocol(&protocol1.id)
+            .expect("list for protocol1");
+        assert_eq!(items_for_p1.len(), 2);
+    }
+
+    #[test]
+    fn get_inventory_item_returns_existing_item() {
+        let storage = create_test_storage();
+        let protocol = PeptideProtocol::new("Test", "BPC-157");
+        storage.upsert_protocol(&protocol).expect("upsert protocol");
+
+        let item = InventoryItem::new(&protocol.id);
+        let item_id = item.id.clone();
+        storage.upsert_inventory_item(&item).expect("upsert");
+
+        let fetched = storage.get_inventory_item(&item_id).expect("get item");
+        assert!(fetched.is_some());
+        assert_eq!(fetched.unwrap().id, item_id);
+    }
+
+    #[test]
+    fn delete_inventory_item_removes_item() {
+        let storage = create_test_storage();
+        let protocol = PeptideProtocol::new("Test", "BPC-157");
+        storage.upsert_protocol(&protocol).expect("upsert protocol");
+
+        let item = InventoryItem::new(&protocol.id);
+        let item_id = item.id.clone();
+        storage.upsert_inventory_item(&item).expect("upsert");
+
+        storage.delete_inventory_item(&item_id).expect("delete");
+
+        let items = storage.list_inventory().expect("list");
+        assert_eq!(items.len(), 0);
+    }
+
+    // =============================================================================
+    // Price History Tests
+    // =============================================================================
+
+    #[test]
+    fn add_price_history_and_list_roundtrips() {
+        let storage = create_test_storage();
+        let supplier = Supplier::new("TestSupplier");
+        storage.upsert_supplier(&supplier).expect("upsert supplier");
+
+        let price = PriceHistory::new(&supplier.id, "BPC-157", 2.5);
+        storage.add_price_history(&price).expect("add price");
+
+        let prices = storage
+            .list_price_history_for_supplier(&supplier.id, None)
+            .expect("list prices");
+        assert_eq!(prices.len(), 1);
+        assert_eq!(prices[0].cost_per_mg, 2.5);
+    }
+
+    #[test]
+    fn list_price_history_filters_by_peptide() {
+        let storage = create_test_storage();
+        let supplier = Supplier::new("TestSupplier");
+        storage.upsert_supplier(&supplier).expect("upsert supplier");
+
+        let price1 = PriceHistory::new(&supplier.id, "BPC-157", 2.5);
+        let price2 = PriceHistory::new(&supplier.id, "TB-500", 3.0);
+        let price3 = PriceHistory::new(&supplier.id, "BPC-157", 2.6);
+
+        storage.add_price_history(&price1).expect("add");
+        storage.add_price_history(&price2).expect("add");
+        storage.add_price_history(&price3).expect("add");
+
+        let bpc_prices = storage
+            .list_price_history_for_supplier(&supplier.id, Some("BPC-157"))
+            .expect("list");
+        assert_eq!(bpc_prices.len(), 2);
+        assert!(bpc_prices.iter().all(|p| p.peptide_name == "BPC-157"));
+    }
+
+    #[test]
+    fn get_latest_price_returns_most_recent() {
+        let storage = create_test_storage();
+        let supplier = Supplier::new("TestSupplier");
+        storage.upsert_supplier(&supplier).expect("upsert supplier");
+
+        let price1 = PriceHistory::new(&supplier.id, "BPC-157", 2.5);
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let price2 = PriceHistory::new(&supplier.id, "BPC-157", 2.6);
+
+        storage.add_price_history(&price1).expect("add");
+        storage.add_price_history(&price2).expect("add");
+
+        let latest = storage
+            .get_latest_price(&supplier.id, "BPC-157")
+            .expect("get latest");
+        assert!(latest.is_some());
+        assert_eq!(latest.unwrap().cost_per_mg, 2.6);
+    }
+
+    // =============================================================================
+    // Alert Tests
+    // =============================================================================
+
+    #[test]
+    fn create_alert_and_list_roundtrips() {
+        let storage = create_test_storage();
+        let alert = Alert::new(
+            AlertType::LowStock,
+            AlertSeverity::Warning,
+            "Low Stock",
+            "Vial is running low",
+        );
+
+        storage.create_alert(&alert).expect("create alert");
+
+        let alerts = storage.list_alerts(false).expect("list alerts");
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].title, "Low Stock");
+        assert_eq!(alerts[0].alert_type, AlertType::LowStock);
+    }
+
+    #[test]
+    fn list_alerts_excludes_dismissed_by_default() {
+        let storage = create_test_storage();
+        let mut alert1 = Alert::new(
+            AlertType::LowStock,
+            AlertSeverity::Warning,
+            "Alert 1",
+            "Message 1",
+        );
+        let mut alert2 = Alert::new(
+            AlertType::Expired,
+            AlertSeverity::Critical,
+            "Alert 2",
+            "Message 2",
+        );
+        alert2.is_dismissed = true;
+
+        storage.create_alert(&alert1).expect("create");
+        storage.create_alert(&alert2).expect("create");
+
+        let alerts = storage.list_alerts(false).expect("list alerts");
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].title, "Alert 1");
+    }
+
+    #[test]
+    fn list_alerts_includes_dismissed_when_requested() {
+        let storage = create_test_storage();
+        let mut alert1 = Alert::new(
+            AlertType::LowStock,
+            AlertSeverity::Warning,
+            "Alert 1",
+            "Message 1",
+        );
+        let mut alert2 = Alert::new(
+            AlertType::Expired,
+            AlertSeverity::Critical,
+            "Alert 2",
+            "Message 2",
+        );
+        alert2.is_dismissed = true;
+
+        storage.create_alert(&alert1).expect("create");
+        storage.create_alert(&alert2).expect("create");
+
+        let alerts = storage.list_alerts(true).expect("list alerts with dismissed");
+        assert_eq!(alerts.len(), 2);
+    }
+
+    #[test]
+    fn mark_alert_read_updates_status() {
+        let storage = create_test_storage();
+        let alert = Alert::new(
+            AlertType::LowStock,
+            AlertSeverity::Warning,
+            "Test",
+            "Message",
+        );
+        let alert_id = alert.id.clone();
+        storage.create_alert(&alert).expect("create");
+
+        storage.mark_alert_read(&alert_id).expect("mark read");
+
+        // Note: mark_alert_read only updates is_read flag, not the payload blob
+        // This test verifies the SQL command succeeds without error
+    }
+
+    #[test]
+    fn dismiss_alert_updates_status() {
+        let storage = create_test_storage();
+        let alert = Alert::new(
+            AlertType::LowStock,
+            AlertSeverity::Warning,
+            "Test",
+            "Message",
+        );
+        let alert_id = alert.id.clone();
+        storage.create_alert(&alert).expect("create");
+
+        storage.dismiss_alert(&alert_id).expect("dismiss");
+
+        let alerts = storage.list_alerts(false).expect("list");
+        assert_eq!(alerts.len(), 0); // Dismissed alerts are excluded
+    }
+
+    #[test]
+    fn clear_all_alerts_removes_all() {
+        let storage = create_test_storage();
+        let alert1 = Alert::new(
+            AlertType::LowStock,
+            AlertSeverity::Warning,
+            "Alert 1",
+            "Message",
+        );
+        let alert2 = Alert::new(
+            AlertType::Expired,
+            AlertSeverity::Critical,
+            "Alert 2",
+            "Message",
+        );
+
+        storage.create_alert(&alert1).expect("create");
+        storage.create_alert(&alert2).expect("create");
+
+        storage.clear_all_alerts().expect("clear all");
+
+        let alerts = storage.list_alerts(true).expect("list");
+        assert_eq!(alerts.len(), 0);
+    }
+
+    // =============================================================================
+    // Summary History Tests
+    // =============================================================================
+
+    #[test]
+    fn save_summary_and_list_roundtrips() {
+        let storage = create_test_storage();
+        let summary = SummaryHistory::new(
+            "BPC-157 Research Summary",
+            "Original paper content...",
+            "Summary output...",
+            "markdown",
+            "claude",
+        );
+
+        storage.save_summary(&summary).expect("save summary");
+
+        let summaries = storage.list_summary_history(None).expect("list summaries");
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].title, "BPC-157 Research Summary");
+    }
+
+    #[test]
+    fn list_summary_history_respects_limit() {
+        let storage = create_test_storage();
+        for i in 1..=5 {
+            let summary = SummaryHistory::new(
+                &format!("Summary {}", i),
+                "content",
+                "output",
+                "markdown",
+                "claude",
+            );
+            storage.save_summary(&summary).expect("save");
+        }
+
+        let summaries = storage.list_summary_history(Some(3)).expect("list");
+        assert_eq!(summaries.len(), 3);
+    }
+
+    #[test]
+    fn list_summary_history_without_limit_returns_all() {
+        let storage = create_test_storage();
+        for i in 1..=10 {
+            let summary = SummaryHistory::new(
+                &format!("Summary {}", i),
+                "content",
+                "output",
+                "markdown",
+                "claude",
+            );
+            storage.save_summary(&summary).expect("save");
+        }
+
+        let summaries = storage.list_summary_history(None).expect("list");
+        assert_eq!(summaries.len(), 10);
+    }
+
+    #[test]
+    fn delete_summary_removes_summary() {
+        let storage = create_test_storage();
+        let summary = SummaryHistory::new("Test", "content", "output", "markdown", "claude");
+        let summary_id = summary.id.clone();
+        storage.save_summary(&summary).expect("save");
+
+        storage.delete_summary(&summary_id).expect("delete");
+
+        let summaries = storage.list_summary_history(None).expect("list");
+        assert_eq!(summaries.len(), 0);
+    }
+
+    // =============================================================================
+    // Schema & Initialization Tests
+    // =============================================================================
+
+    #[test]
+    fn initialize_creates_all_tables() {
+        let tmp = tempdir().expect("tempdir");
+        let key_provider =
+            Arc::new(StaticKeyProvider::new(vec![7u8; 32]).expect("static key provider"));
+        let storage = StorageManager::new(StorageConfig {
+            data_dir: Some(tmp.path().to_path_buf()),
+            db_file_name: Some("test.sqlite".into()),
+            key_provider,
+        })
+        .expect("storage manager");
+
+        storage.initialize().expect("initialize");
+
+        // Verify tables exist by attempting basic operations
+        storage.list_protocols().expect("protocols table exists");
+        storage.list_dose_logs().expect("dose_logs table exists");
+        storage.list_literature().expect("literature_cache table exists");
+        storage.list_suppliers().expect("suppliers table exists");
+        storage.list_inventory().expect("inventory table exists");
+        storage
+            .list_alerts(true)
+            .expect("alerts table exists");
+        storage
+            .list_summary_history(None)
+            .expect("summary_history table exists");
+    }
+
+    #[test]
+    fn initialize_is_idempotent() {
+        let storage = create_test_storage();
+        // Initialize again - should not error
+        storage.initialize().expect("initialize again");
     }
 }
