@@ -9,7 +9,7 @@ use tracing::info;
 
 use crate::encryption::{EnvelopeEncryption, KeyProvider};
 use crate::models::{
-    Alert, DoseLog, InventoryItem, LiteratureEntry, PeptideProtocol,
+    Alert, DoseLog, HealthReport, InventoryItem, LiteratureEntry, PeptideProtocol,
     PriceHistory, Supplier, SummaryHistory,
 };
 
@@ -52,8 +52,16 @@ impl StorageManager {
     fn open_connection(&self) -> Result<Connection> {
         let conn = Connection::open(&self.db_path)
             .with_context(|| format!("Unable to open database at {}", self.db_path.display()))?;
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
-            .context("Unable to configure SQLite pragmas")?;
+
+        // Enable enhanced safety and integrity features
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL;
+             PRAGMA foreign_keys=ON;
+             PRAGMA synchronous=FULL;
+             PRAGMA temp_store=MEMORY;"
+        )
+        .context("Unable to configure SQLite pragmas")?;
+
         Ok(conn)
     }
 
@@ -238,6 +246,89 @@ impl StorageManager {
         self.upsert_protocol(&protocol)?;
 
         Ok(protocol.is_favorite)
+    }
+
+    /// Perform comprehensive database health check
+    /// Returns detailed health report including integrity check results
+    pub fn health_check(&self) -> Result<HealthReport> {
+        let conn = self.open_connection()?;
+        let mut report = HealthReport::new();
+
+        // 1. Run quick integrity check (faster than full integrity_check)
+        let integrity: String = conn
+            .query_row("PRAGMA quick_check", [], |row| row.get(0))
+            .context("Failed to run integrity check")?;
+
+        report.is_healthy = integrity == "ok";
+        report.integrity_result = integrity;
+
+        // 2. Get database size information
+        let page_count: i64 = conn
+            .query_row("PRAGMA page_count", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let page_size: i64 = conn
+            .query_row("PRAGMA page_size", [], |row| row.get(0))
+            .unwrap_or(4096);
+
+        report.page_count = page_count;
+        report.page_size = page_size;
+        report.size_mb = (page_count * page_size) as f64 / 1_048_576.0;
+
+        // 3. Check journal mode (should be WAL)
+        let journal_mode: String = conn
+            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+            .unwrap_or_else(|_| String::from("unknown"));
+
+        report.wal_mode = journal_mode.to_lowercase() == "wal";
+
+        // 4. Check foreign keys (should be ON)
+        let foreign_keys: i64 = conn
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        report.foreign_keys_enabled = foreign_keys == 1;
+
+        // 5. Update timestamp
+        report.last_checked = now_timestamp();
+
+        // Log health check results
+        if report.is_healthy {
+            info!(
+                "Database health check: OK ({:.2} MB, {} pages)",
+                report.size_mb, report.page_count
+            );
+        } else {
+            tracing::error!(
+                "Database corruption detected: {}",
+                report.integrity_result
+            );
+        }
+
+        Ok(report)
+    }
+
+    /// Verify database before critical operations
+    /// Returns Ok if healthy, Err if corrupted
+    pub fn verify_integrity(&self) -> Result<()> {
+        let report = self.health_check()?;
+
+        if !report.is_healthy {
+            return Err(anyhow::anyhow!(
+                "Database integrity check failed: {}",
+                report.integrity_result
+            ));
+        }
+
+        if !report.wal_mode {
+            tracing::warn!("Database is not using WAL mode");
+        }
+
+        if !report.foreign_keys_enabled {
+            tracing::warn!("Foreign keys are not enabled");
+        }
+
+        Ok(())
     }
 
     /// Get a database connection for advanced operations

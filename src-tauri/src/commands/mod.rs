@@ -4,6 +4,7 @@ pub mod backup;
 pub mod defaults;
 pub mod doses;
 pub mod drive;
+pub mod health;
 pub mod literature;
 pub mod protocols;
 pub mod restore;

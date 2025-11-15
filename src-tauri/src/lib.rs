@@ -18,6 +18,7 @@ use commands::{
         check_drive_status, complete_drive_oauth, disconnect_drive, start_drive_oauth,
         upload_to_drive, OAuthState,
     },
+    health::{get_database_health, verify_database_integrity},
     literature::{list_literature, open_external_url, search_cached_literature, search_literature},
     protocols::{list_protocols, save_protocol, toggle_protocol_favorite},
     restore::{preview_backup, restore_from_backup},
@@ -60,6 +61,31 @@ pub fn run() {
 
             let scheduler_state = SchedulerState::new();
             let state_arc = std::sync::Arc::new(state);
+
+            // Run database health check on startup
+            info!("Running startup database health check...");
+            match state_arc.storage.health_check() {
+                Ok(report) if report.is_healthy => {
+                    info!(
+                        "✓ Database health check: OK ({:.2} MB, WAL: {}, FK: {})",
+                        report.size_mb,
+                        report.wal_mode,
+                        report.foreign_keys_enabled
+                    );
+                }
+                Ok(report) => {
+                    tracing::error!(
+                        "✗ Database corruption detected: {}",
+                        report.integrity_result
+                    );
+                    tracing::error!("Please restore from a backup or contact support");
+                    // Continue loading but warn user
+                }
+                Err(e) => {
+                    tracing::warn!("Health check failed: {:#}", e);
+                    // Non-fatal, continue loading
+                }
+            }
 
             // Store app handle for notifications
             let scheduler_clone_handle = scheduler_state.clone();
@@ -152,6 +178,9 @@ pub fn run() {
             update_dose_schedule,
             delete_dose_schedule,
             get_pending_dose_reminders,
+            // Health & diagnostics commands
+            get_database_health,
+            verify_database_integrity,
             // Default peptides
             get_default_peptides,
             populate_default_peptides

@@ -46,6 +46,27 @@ export async function toggleProtocolFavorite(protocolId: string) {
   });
 }
 
+// Database Health types and functions
+
+export interface HealthReport {
+  is_healthy: boolean;
+  integrity_result: string;
+  size_mb: number;
+  page_count: number;
+  page_size: number;
+  wal_mode: boolean;
+  foreign_keys_enabled: boolean;
+  last_checked: string;
+}
+
+export async function getDatabaseHealth() {
+  return invoke<HealthReport>("get_database_health");
+}
+
+export async function verifyDatabaseIntegrity() {
+  return invoke<void>("verify_database_integrity");
+}
+
 export async function summarizeContent(params: {
   title: string;
   content: string;

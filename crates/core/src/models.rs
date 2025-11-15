@@ -287,6 +287,41 @@ impl SummaryHistory {
     }
 }
 
+/// Database Health Report
+/// Contains information about database integrity and statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthReport {
+    pub is_healthy: bool,
+    pub integrity_result: String, // "ok" or error description
+    pub size_mb: f64,
+    pub page_count: i64,
+    pub page_size: i64,
+    pub wal_mode: bool,
+    pub foreign_keys_enabled: bool,
+    pub last_checked: OffsetDateTime,
+}
+
+impl HealthReport {
+    pub fn new() -> Self {
+        Self {
+            is_healthy: false,
+            integrity_result: String::from("not_checked"),
+            size_mb: 0.0,
+            page_count: 0,
+            page_size: 0,
+            wal_mode: false,
+            foreign_keys_enabled: false,
+            last_checked: now_timestamp(),
+        }
+    }
+}
+
+impl Default for HealthReport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

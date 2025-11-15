@@ -36,6 +36,14 @@ pub async fn export_backup_data(
 ) -> Result<String, String> {
     info!("Starting backup export (encrypted: {})", password.is_some());
 
+    // Verify database integrity before backing up
+    if let Err(e) = state.storage.verify_integrity() {
+        warn!("Database integrity check failed before backup: {:#}", e);
+        return Err(format!("Cannot backup corrupted database: {}. Please restore from a previous backup.", e));
+    }
+
+    info!("Database integrity verified, proceeding with backup");
+
     // Load all data from storage
     let protocols = state.storage.list_protocols().map_err(|e| {
         warn!("Failed to load protocols for backup: {:#}", e);
