@@ -14,6 +14,10 @@ pub struct PeptideProtocol {
     pub target_concentration_mg_ml: Option<f32>,
     pub created_at: OffsetDateTime,
     pub updated_at: OffsetDateTime,
+    #[serde(default)]
+    pub is_favorite: bool,
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 impl PeptideProtocol {
@@ -28,6 +32,8 @@ impl PeptideProtocol {
             target_concentration_mg_ml: None,
             created_at: now,
             updated_at: now,
+            is_favorite: false,
+            tags: Vec::new(),
         }
     }
 }
@@ -281,6 +287,197 @@ impl SummaryHistory {
             provider: provider.into(),
             created_at: now_timestamp(),
         }
+    }
+}
+
+/// Body Metric Entry
+/// Tracks body composition and health metrics over time
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BodyMetric {
+    pub id: String,
+    pub date: OffsetDateTime,
+    pub weight_kg: Option<f32>,
+    pub body_fat_percentage: Option<f32>,
+    pub muscle_mass_kg: Option<f32>,
+    pub waist_cm: Option<f32>,
+    pub notes: Option<String>,
+    pub created_at: OffsetDateTime,
+    pub updated_at: OffsetDateTime,
+}
+
+impl BodyMetric {
+    pub fn new(date: OffsetDateTime) -> Self {
+        let now = now_timestamp();
+        Self {
+            id: Uuid::new_v4().to_string(),
+            date,
+            weight_kg: None,
+            body_fat_percentage: None,
+            muscle_mass_kg: None,
+            waist_cm: None,
+            notes: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+}
+
+/// Side Effect Entry
+/// Tracks adverse reactions and side effects from peptides
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SideEffect {
+    pub id: String,
+    pub protocol_id: Option<String>, // Which protocol caused it (if known)
+    pub dose_log_id: Option<String>, // Which specific dose caused it (if known)
+    pub date: OffsetDateTime,
+    pub severity: String, // "mild", "moderate", "severe"
+    pub symptom: String, // e.g., "nausea", "headache", "injection site redness"
+    pub description: Option<String>, // Detailed notes
+    pub duration_minutes: Option<i32>, // How long it lasted
+    pub resolved: bool, // Whether the side effect has resolved
+    pub created_at: OffsetDateTime,
+    pub updated_at: OffsetDateTime,
+}
+
+impl SideEffect {
+    pub fn new<S: Into<String>>(date: OffsetDateTime, severity: S, symptom: S) -> Self {
+        let now = now_timestamp();
+        Self {
+            id: Uuid::new_v4().to_string(),
+            protocol_id: None,
+            dose_log_id: None,
+            date,
+            severity: severity.into(),
+            symptom: symptom.into(),
+            description: None,
+            duration_minutes: None,
+            resolved: false,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+}
+
+/// Database Health Report
+/// Contains information about database integrity and statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthReport {
+    pub is_healthy: bool,
+    pub integrity_result: String, // "ok" or error description
+    pub size_mb: f64,
+    pub page_count: i64,
+    pub page_size: i64,
+    pub wal_mode: bool,
+    pub foreign_keys_enabled: bool,
+    pub last_checked: OffsetDateTime,
+}
+
+impl HealthReport {
+    pub fn new() -> Self {
+        Self {
+            is_healthy: false,
+            integrity_result: String::from("not_checked"),
+            size_mb: 0.0,
+            page_count: 0,
+            page_size: 0,
+            wal_mode: false,
+            foreign_keys_enabled: false,
+            last_checked: now_timestamp(),
+        }
+    }
+}
+
+impl Default for HealthReport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Database Statistics
+/// Contains detailed metrics about database size, fragmentation, and WAL usage
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatabaseStats {
+    pub page_count: i64,
+    pub page_size: i64,
+    pub total_size_mb: f64,
+    pub freelist_pages: i64,
+    pub wasted_space_mb: f64,
+    pub wal_size_mb: f64,
+}
+
+impl DatabaseStats {
+    /// Calculate the percentage of database space that is wasted due to fragmentation
+    ///
+    /// Returns a value between 0.0 and 100.0 representing the percentage of
+    /// database pages that are in the freelist (unused).
+    ///
+    /// # Example
+    /// ```
+    /// # use peptrack_core::models::DatabaseStats;
+    /// let stats = DatabaseStats {
+    ///     page_count: 1000,
+    ///     page_size: 4096,
+    ///     total_size_mb: 4.0,
+    ///     freelist_pages: 150,
+    ///     wasted_space_mb: 0.6,
+    ///     wal_size_mb: 2.0,
+    /// };
+    /// assert_eq!(stats.fragmentation_percentage(), 15.0);
+    /// ```
+    pub fn fragmentation_percentage(&self) -> f64 {
+        if self.page_count == 0 {
+            0.0
+        } else {
+            (self.freelist_pages as f64 / self.page_count as f64) * 100.0
+        }
+    }
+
+    /// Determine if database should be vacuumed to reclaim space
+    ///
+    /// Returns `true` if:
+    /// - Fragmentation is >10% of total database, OR
+    /// - Wasted space exceeds 50MB
+    ///
+    /// # Example
+    /// ```
+    /// # use peptrack_core::models::DatabaseStats;
+    /// let stats = DatabaseStats {
+    ///     page_count: 1000,
+    ///     page_size: 4096,
+    ///     total_size_mb: 4.0,
+    ///     freelist_pages: 150,  // 15% fragmentation
+    ///     wasted_space_mb: 0.6,
+    ///     wal_size_mb: 2.0,
+    /// };
+    /// assert!(stats.should_vacuum()); // >10% fragmented
+    /// ```
+    pub fn should_vacuum(&self) -> bool {
+        // Recommend vacuum if >10% fragmentation or >50MB wasted
+        self.fragmentation_percentage() > 10.0 || self.wasted_space_mb > 50.0
+    }
+
+    /// Determine if WAL file should be checkpointed
+    ///
+    /// Returns `true` if WAL file exceeds 10MB. Large WAL files should be
+    /// checkpointed (merged into main database) to prevent excessive growth
+    /// and ensure backup consistency.
+    ///
+    /// # Example
+    /// ```
+    /// # use peptrack_core::models::DatabaseStats;
+    /// let stats = DatabaseStats {
+    ///     page_count: 1000,
+    ///     page_size: 4096,
+    ///     total_size_mb: 4.0,
+    ///     freelist_pages: 50,
+    ///     wasted_space_mb: 0.2,
+    ///     wal_size_mb: 15.0,  // Large WAL
+    /// };
+    /// assert!(stats.should_checkpoint()); // WAL >10MB
+    /// ```
+    pub fn should_checkpoint(&self) -> bool {
+        // Recommend checkpoint if WAL > 10MB
+        self.wal_size_mb > 10.0
     }
 }
 

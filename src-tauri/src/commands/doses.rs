@@ -66,6 +66,18 @@ pub async fn delete_dose_log(
         .map_err(|err| err.to_string())
 }
 
+/// Bulk delete multiple dose logs
+#[tauri::command]
+pub async fn bulk_delete_doses(
+    state: State<'_, std::sync::Arc<AppState>>,
+    dose_ids: Vec<String>,
+) -> Result<usize, String> {
+    state
+        .storage
+        .bulk_delete_doses(&dose_ids)
+        .map_err(|err| err.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,12 +1,15 @@
 pub mod ai;
 pub mod analytics;
 pub mod backup;
+pub mod body_metrics;
 pub mod defaults;
 pub mod doses;
 pub mod drive;
+pub mod health;
 pub mod literature;
 pub mod protocols;
 pub mod restore;
 pub mod schedules;
 pub mod scheduler_v2;
+pub mod side_effects;
 pub mod suppliers;

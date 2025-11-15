@@ -8,6 +8,8 @@ export interface PeptideProtocol {
   target_concentration_mg_ml?: number | null;
   created_at: string;
   updated_at: string;
+  is_favorite?: boolean;
+  tags?: string[];
 }
 
 export interface CreateProtocolPayload {
@@ -37,6 +39,224 @@ export async function saveProtocol(payload: CreateProtocolPayload) {
       targetConcentrationMgMl: payload.targetConcentrationMgMl,
     },
   });
+}
+
+export async function toggleProtocolFavorite(protocolId: string) {
+  return invoke<boolean>("toggle_protocol_favorite", {
+    protocolId,
+  });
+}
+
+export async function updateProtocolTags(protocolId: string, tags: string[]) {
+  return invoke<string[]>("update_protocol_tags", {
+    protocolId,
+    tags,
+  });
+}
+
+export async function addProtocolTag(protocolId: string, tag: string) {
+  return invoke<string[]>("add_protocol_tag", {
+    protocolId,
+    tag,
+  });
+}
+
+export async function removeProtocolTag(protocolId: string, tag: string) {
+  return invoke<string[]>("remove_protocol_tag", {
+    protocolId,
+    tag,
+  });
+}
+
+// Bulk Operations for Protocols
+
+export async function deleteProtocol(protocolId: string) {
+  return invoke<void>("delete_protocol", {
+    protocolId,
+  });
+}
+
+export async function bulkDeleteProtocols(protocolIds: string[]) {
+  return invoke<number>("bulk_delete_protocols", {
+    protocolIds,
+  });
+}
+
+export async function bulkAddTagToProtocols(protocolIds: string[], tag: string) {
+  return invoke<number>("bulk_add_tag_to_protocols", {
+    protocolIds,
+    tag,
+  });
+}
+
+export async function bulkToggleFavoriteProtocols(protocolIds: string[], isFavorite: boolean) {
+  return invoke<number>("bulk_toggle_favorite_protocols", {
+    protocolIds,
+    isFavorite,
+  });
+}
+
+// Bulk Operations for Doses
+
+export async function bulkDeleteDoses(doseIds: string[]) {
+  return invoke<number>("bulk_delete_doses", {
+    doseIds,
+  });
+}
+
+// Body Metrics types and functions
+
+export interface BodyMetric {
+  id: string;
+  date: string; // ISO 8601 string
+  weight_kg?: number | null;
+  body_fat_percentage?: number | null;
+  muscle_mass_kg?: number | null;
+  waist_cm?: number | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BodyMetricPayload {
+  date: string; // ISO 8601 string
+  weight_kg?: number | null;
+  body_fat_percentage?: number | null;
+  muscle_mass_kg?: number | null;
+  waist_cm?: number | null;
+  notes?: string | null;
+}
+
+export async function logBodyMetric(payload: BodyMetricPayload) {
+  return invoke<BodyMetric>("log_body_metric", { payload });
+}
+
+export async function listBodyMetrics() {
+  return invoke<BodyMetric[]>("list_body_metrics");
+}
+
+export async function getBodyMetric(metricId: string) {
+  return invoke<BodyMetric | null>("get_body_metric", { metricId });
+}
+
+export async function updateBodyMetric(metricId: string, payload: BodyMetricPayload) {
+  return invoke<BodyMetric>("update_body_metric", { metricId, payload });
+}
+
+export async function deleteBodyMetric(metricId: string) {
+  return invoke<void>("delete_body_metric", { metricId });
+}
+
+export async function bulkDeleteBodyMetrics(metricIds: string[]) {
+  return invoke<number>("bulk_delete_body_metrics", { metricIds });
+}
+
+// Side Effects types and functions
+
+export interface SideEffect {
+  id: string;
+  protocol_id?: string | null;
+  dose_log_id?: string | null;
+  date: string; // ISO 8601 string
+  severity: string; // "mild", "moderate", "severe"
+  symptom: string;
+  description?: string | null;
+  duration_minutes?: number | null;
+  resolved: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SideEffectPayload {
+  protocol_id?: string | null;
+  dose_log_id?: string | null;
+  date: string; // ISO 8601 string
+  severity: string;
+  symptom: string;
+  description?: string | null;
+  duration_minutes?: number | null;
+  resolved?: boolean | null;
+}
+
+export async function logSideEffect(payload: SideEffectPayload) {
+  return invoke<SideEffect>("log_side_effect", { payload });
+}
+
+export async function listSideEffects() {
+  return invoke<SideEffect[]>("list_side_effects");
+}
+
+export async function getSideEffect(effectId: string) {
+  return invoke<SideEffect | null>("get_side_effect", { effectId });
+}
+
+export async function listSideEffectsByProtocol(protocolId: string) {
+  return invoke<SideEffect[]>("list_side_effects_by_protocol", { protocolId });
+}
+
+export async function updateSideEffect(effectId: string, payload: SideEffectPayload) {
+  return invoke<SideEffect>("update_side_effect", { effectId, payload });
+}
+
+export async function toggleSideEffectResolved(effectId: string, resolved: boolean) {
+  return invoke<void>("toggle_side_effect_resolved", { effectId, resolved });
+}
+
+export async function deleteSideEffect(effectId: string) {
+  return invoke<void>("delete_side_effect", { effectId });
+}
+
+export async function bulkDeleteSideEffects(effectIds: string[]) {
+  return invoke<number>("bulk_delete_side_effects", { effectIds });
+}
+
+// Predictive Inventory types and functions
+
+export interface InventoryPrediction {
+  inventory_id: string;
+  protocol_id: string;
+  protocol_name: string;
+  peptide_name: string;
+  current_quantity_mg: number;
+  average_daily_usage_mg: number;
+  estimated_days_remaining: number;
+  will_run_out_soon: boolean;
+  threshold_days: number;
+}
+
+export async function predictInventoryDepletion(thresholdDays?: number, analysisDays?: number) {
+  return invoke<InventoryPrediction[]>("predict_inventory_depletion", {
+    thresholdDays,
+    analysisDays,
+  });
+}
+
+export async function checkInventoryAndCreateAlerts(thresholdDays?: number, analysisDays?: number) {
+  return invoke<Alert[]>("check_inventory_and_create_alerts", {
+    thresholdDays,
+    analysisDays,
+  });
+}
+
+// Database Health types and functions
+
+export interface HealthReport {
+  is_healthy: boolean;
+  integrity_result: string;
+  size_mb: number;
+  page_count: number;
+  page_size: number;
+  wal_mode: boolean;
+  foreign_keys_enabled: boolean;
+  last_checked: string;
+}
+
+export async function getDatabaseHealth() {
+  return invoke<HealthReport>("get_database_health");
+}
+
+export async function verifyDatabaseIntegrity() {
+  return invoke<void>("verify_database_integrity");
 }
 
 export async function summarizeContent(params: {

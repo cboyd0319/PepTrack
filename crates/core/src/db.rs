@@ -3,17 +3,24 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use dirs::data_dir;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use time::OffsetDateTime;
 use tracing::info;
 
 use crate::encryption::{EnvelopeEncryption, KeyProvider};
 use crate::models::{
-    Alert, DoseLog, InventoryItem, LiteratureEntry, PeptideProtocol,
-    PriceHistory, Supplier, SummaryHistory,
+    Alert, BodyMetric, DatabaseStats, DoseLog, HealthReport, InventoryItem, LiteratureEntry, PeptideProtocol,
+    PriceHistory, SideEffect, Supplier, SummaryHistory,
 };
 
 const DEFAULT_DB_NAME: &str = "peptrack.sqlite";
+
+// PepTrack Application ID (unique identifier for this SQLite database)
+// Generated from: "PepTrack".as_bytes() hashed
+const PEPTRACK_APP_ID: i32 = 0x50657054; // "PepT" in hex
+
+// Current schema version for migrations
+const SCHEMA_VERSION: i32 = 2;
 
 pub struct StorageConfig {
     pub data_dir: Option<PathBuf>,
@@ -52,8 +59,82 @@ impl StorageManager {
     fn open_connection(&self) -> Result<Connection> {
         let conn = Connection::open(&self.db_path)
             .with_context(|| format!("Unable to open database at {}", self.db_path.display()))?;
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
-            .context("Unable to configure SQLite pragmas")?;
+
+        // =====================================================================
+        // COMPREHENSIVE SQLITE CONFIGURATION
+        // Maximum safety, performance, and integrity
+        // =====================================================================
+
+        conn.execute_batch(&format!(
+            "-- ═══════════════════════════════════════════════════════════
+             -- CORE SAFETY & DURABILITY
+             -- ═══════════════════════════════════════════════════════════
+
+             -- Write-Ahead Logging for crash safety & better concurrency
+             PRAGMA journal_mode=WAL;
+
+             -- Maximum durability - fsync after every transaction
+             PRAGMA synchronous=FULL;
+
+             -- Enforce foreign key constraints
+             PRAGMA foreign_keys=ON;
+
+             -- Overwrite deleted data with zeros (security)
+             PRAGMA secure_delete=ON;
+
+             -- Verify database structure on access
+             PRAGMA cell_size_check=ON;
+
+             -- Disable loading of untrusted schemas (SQLite 3.31+)
+             -- Note: May not be supported on older SQLite versions
+             -- PRAGMA trusted_schema=OFF;
+
+             -- ═══════════════════════════════════════════════════════════
+             -- PERFORMANCE OPTIMIZATIONS
+             -- ═══════════════════════════════════════════════════════════
+
+             -- 64MB cache (negative value = kilobytes)
+             PRAGMA cache_size=-64000;
+
+             -- Memory-mapped I/O for faster reads (256MB)
+             PRAGMA mmap_size=268435456;
+
+             -- Store temp tables & indices in memory
+             PRAGMA temp_store=MEMORY;
+
+             -- Wait up to 5 seconds if database is locked
+             PRAGMA busy_timeout=5000;
+
+             -- ═══════════════════════════════════════════════════════════
+             -- MAINTENANCE & OPTIMIZATION
+             -- ═══════════════════════════════════════════════════════════
+
+             -- Auto-vacuum to reclaim space (incremental for better performance)
+             PRAGMA auto_vacuum=INCREMENTAL;
+
+             -- Checkpoint WAL every 1000 pages (auto-merge to main DB)
+             PRAGMA wal_autocheckpoint=1000;
+
+             -- Enable recursive triggers for complex integrity rules
+             PRAGMA recursive_triggers=ON;
+
+             -- ═══════════════════════════════════════════════════════════
+             -- APPLICATION METADATA
+             -- ═══════════════════════════════════════════════════════════
+
+             -- Set unique application ID for this database
+             PRAGMA application_id={};
+
+             -- Track schema version for migrations
+             PRAGMA user_version={};
+
+             -- Ensure UTF-8 encoding
+             PRAGMA encoding='UTF-8';",
+            PEPTRACK_APP_ID,
+            SCHEMA_VERSION
+        ))
+        .context("Unable to configure SQLite pragmas")?;
+
         Ok(conn)
     }
 
@@ -65,7 +146,8 @@ impl StorageManager {
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 payload BLOB NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                is_favorite INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS dose_logs (
@@ -108,6 +190,9 @@ impl StorageManager {
             CREATE INDEX IF NOT EXISTS idx_price_history_supplier_peptide
                 ON price_history(supplier_id, peptide_name, recorded_at DESC);
 
+            CREATE INDEX IF NOT EXISTS idx_protocols_favorite
+                ON protocols(is_favorite DESC, updated_at DESC);
+
             CREATE TABLE IF NOT EXISTS alerts (
                 id TEXT PRIMARY KEY,
                 alert_type TEXT NOT NULL,
@@ -130,11 +215,68 @@ impl StorageManager {
 
             CREATE INDEX IF NOT EXISTS idx_summary_history_created
                 ON summary_history(created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS body_metrics (
+                id TEXT PRIMARY KEY,
+                date TEXT NOT NULL,
+                payload BLOB NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_body_metrics_date
+                ON body_metrics(date DESC);
+
+            CREATE TABLE IF NOT EXISTS side_effects (
+                id TEXT PRIMARY KEY,
+                protocol_id TEXT,
+                dose_log_id TEXT,
+                date TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                payload BLOB NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (protocol_id) REFERENCES protocols(id) ON DELETE SET NULL,
+                FOREIGN KEY (dose_log_id) REFERENCES dose_logs(id) ON DELETE SET NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_side_effects_date
+                ON side_effects(date DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_side_effects_protocol
+                ON side_effects(protocol_id);
             "#,
         )
         .context("Failed to initialize database schema")?;
 
+        // Run migrations for existing databases
+        self.run_migrations(&conn)?;
+
         info!("Database initialized at {}", self.db_path.display());
+        Ok(())
+    }
+
+    /// Run database migrations for schema updates
+    fn run_migrations(&self, conn: &Connection) -> Result<()> {
+        // Migration: Add is_favorite column to protocols table if it doesn't exist
+        let has_favorite_column: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('protocols') WHERE name='is_favorite'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !has_favorite_column {
+            info!("Running migration: Adding is_favorite column to protocols table");
+            conn.execute(
+                "ALTER TABLE protocols ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0",
+                [],
+            )
+            .context("Failed to add is_favorite column")?;
+            info!("Migration completed: is_favorite column added");
+        }
+
         Ok(())
     }
 
@@ -145,18 +287,20 @@ impl StorageManager {
 
         conn.execute(
             r#"
-            INSERT INTO protocols (id, name, payload, updated_at)
-            VALUES (?1, ?2, ?3, ?4)
+            INSERT INTO protocols (id, name, payload, updated_at, is_favorite)
+            VALUES (?1, ?2, ?3, ?4, ?5)
             ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name,
                 payload = excluded.payload,
-                updated_at = excluded.updated_at;
+                updated_at = excluded.updated_at,
+                is_favorite = excluded.is_favorite;
             "#,
             params![
                 protocol.id,
                 protocol.name,
                 encrypted,
-                protocol.updated_at.to_string()
+                protocol.updated_at.to_string(),
+                protocol.is_favorite as i32
             ],
         )
         .context("Failed to upsert protocol")?;
@@ -166,7 +310,7 @@ impl StorageManager {
 
     pub fn list_protocols(&self) -> Result<Vec<PeptideProtocol>> {
         let conn = self.open_connection()?;
-        let mut stmt = conn.prepare("SELECT payload FROM protocols ORDER BY updated_at DESC")?;
+        let mut stmt = conn.prepare("SELECT payload FROM protocols ORDER BY is_favorite DESC, updated_at DESC")?;
         let mut rows = stmt.query([]).context("Unable to run list query")?;
         let mut protocols = Vec::new();
         while let Some(row) = rows.next()? {
@@ -187,6 +331,637 @@ impl StorageManager {
         } else {
             Ok(None)
         }
+    }
+
+    /// Toggle the favorite status of a protocol
+    pub fn toggle_protocol_favorite(&self, protocol_id: &str) -> Result<bool> {
+        let conn = self.open_connection()?;
+
+        // Get current protocol with favorite status
+        let mut protocol = self
+            .get_protocol(protocol_id)?
+            .ok_or_else(|| anyhow::anyhow!("Protocol not found"))?;
+
+        // Toggle favorite status
+        protocol.is_favorite = !protocol.is_favorite;
+
+        // Update the database
+        self.upsert_protocol(&protocol)?;
+
+        Ok(protocol.is_favorite)
+    }
+
+    /// Update the tags for a protocol
+    ///
+    /// Replaces the entire tags list for a protocol. To add/remove individual tags,
+    /// fetch the protocol, modify the tags Vec, and call this method.
+    ///
+    /// # Arguments
+    /// * `protocol_id` - The ID of the protocol to update
+    /// * `tags` - The new list of tags for the protocol
+    ///
+    /// # Returns
+    /// The updated list of tags
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// let tags = vec!["morning".to_string(), "recovery".to_string()];
+    /// storage.update_protocol_tags("protocol-id", tags)?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn update_protocol_tags(&self, protocol_id: &str, tags: Vec<String>) -> Result<Vec<String>> {
+        let mut protocol = self
+            .get_protocol(protocol_id)?
+            .ok_or_else(|| anyhow::anyhow!("Protocol not found"))?;
+
+        // Update tags and timestamp
+        protocol.tags = tags;
+        protocol.updated_at = now_timestamp();
+
+        // Save to database
+        self.upsert_protocol(&protocol)?;
+
+        Ok(protocol.tags)
+    }
+
+    /// Add a tag to a protocol
+    ///
+    /// Adds a new tag if it doesn't already exist. Tags are case-sensitive.
+    ///
+    /// # Arguments
+    /// * `protocol_id` - The ID of the protocol
+    /// * `tag` - The tag to add
+    ///
+    /// # Returns
+    /// The updated list of tags
+    pub fn add_protocol_tag(&self, protocol_id: &str, tag: String) -> Result<Vec<String>> {
+        let mut protocol = self
+            .get_protocol(protocol_id)?
+            .ok_or_else(|| anyhow::anyhow!("Protocol not found"))?;
+
+        // Add tag if it doesn't exist
+        if !protocol.tags.contains(&tag) {
+            protocol.tags.push(tag);
+            protocol.updated_at = now_timestamp();
+            self.upsert_protocol(&protocol)?;
+        }
+
+        Ok(protocol.tags)
+    }
+
+    /// Remove a tag from a protocol
+    ///
+    /// Removes the specified tag if it exists.
+    ///
+    /// # Arguments
+    /// * `protocol_id` - The ID of the protocol
+    /// * `tag` - The tag to remove
+    ///
+    /// # Returns
+    /// The updated list of tags
+    pub fn remove_protocol_tag(&self, protocol_id: &str, tag: &str) -> Result<Vec<String>> {
+        let mut protocol = self
+            .get_protocol(protocol_id)?
+            .ok_or_else(|| anyhow::anyhow!("Protocol not found"))?;
+
+        // Remove tag if it exists
+        if let Some(pos) = protocol.tags.iter().position(|t| t == tag) {
+            protocol.tags.remove(pos);
+            protocol.updated_at = now_timestamp();
+            self.upsert_protocol(&protocol)?;
+        }
+
+        Ok(protocol.tags)
+    }
+
+    /// Delete a single protocol
+    ///
+    /// Permanently removes a protocol from the database. This operation
+    /// cannot be undone.
+    ///
+    /// # Arguments
+    /// * `protocol_id` - The ID of the protocol to delete
+    ///
+    /// # Returns
+    /// `Ok(())` if successful, `Err` if protocol not found or deletion fails
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// storage.delete_protocol("protocol-id")?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn delete_protocol(&self, protocol_id: &str) -> Result<()> {
+        let conn = self.open_connection()?;
+        let rows_affected = conn
+            .execute("DELETE FROM protocols WHERE id = ?1", params![protocol_id])
+            .context("Failed to delete protocol")?;
+
+        if rows_affected == 0 {
+            return Err(anyhow::anyhow!("Protocol not found: {}", protocol_id));
+        }
+
+        Ok(())
+    }
+
+    /// Bulk delete multiple protocols
+    ///
+    /// Deletes multiple protocols in a single transaction for efficiency.
+    /// This operation cannot be undone.
+    ///
+    /// # Arguments
+    /// * `protocol_ids` - Slice of protocol IDs to delete
+    ///
+    /// # Returns
+    /// The number of protocols actually deleted
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// let ids = vec!["id1".to_string(), "id2".to_string()];
+    /// let count = storage.bulk_delete_protocols(&ids)?;
+    /// println!("Deleted {} protocols", count);
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn bulk_delete_protocols(&self, protocol_ids: &[String]) -> Result<usize> {
+        if protocol_ids.is_empty() {
+            return Ok(0);
+        }
+
+        let conn = self.open_connection()?;
+        let mut total_deleted = 0;
+
+        // Use a transaction for atomic bulk delete
+        let tx = conn.unchecked_transaction()?;
+        {
+            let mut stmt = tx.prepare("DELETE FROM protocols WHERE id = ?1")?;
+            for protocol_id in protocol_ids {
+                let rows = stmt.execute(params![protocol_id])?;
+                total_deleted += rows;
+            }
+        }
+        tx.commit()?;
+
+        Ok(total_deleted)
+    }
+
+    /// Bulk delete multiple dose logs
+    ///
+    /// Deletes multiple dose log entries in a single transaction for efficiency.
+    /// This operation cannot be undone.
+    ///
+    /// # Arguments
+    /// * `dose_ids` - Slice of dose log IDs to delete
+    ///
+    /// # Returns
+    /// The number of dose logs actually deleted
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// let ids = vec!["id1".to_string(), "id2".to_string()];
+    /// let count = storage.bulk_delete_doses(&ids)?;
+    /// println!("Deleted {} doses", count);
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn bulk_delete_doses(&self, dose_ids: &[String]) -> Result<usize> {
+        if dose_ids.is_empty() {
+            return Ok(0);
+        }
+
+        let conn = self.open_connection()?;
+        let mut total_deleted = 0;
+
+        // Use a transaction for atomic bulk delete
+        let tx = conn.unchecked_transaction()?;
+        {
+            let mut stmt = tx.prepare("DELETE FROM dose_logs WHERE id = ?1")?;
+            for dose_id in dose_ids {
+                let rows = stmt.execute(params![dose_id])?;
+                total_deleted += rows;
+            }
+        }
+        tx.commit()?;
+
+        Ok(total_deleted)
+    }
+
+    /// Bulk add a tag to multiple protocols
+    ///
+    /// Adds the specified tag to multiple protocols if it doesn't already exist.
+    /// Tags are case-sensitive. Updates timestamps for modified protocols.
+    ///
+    /// # Arguments
+    /// * `protocol_ids` - Slice of protocol IDs to tag
+    /// * `tag` - The tag to add
+    ///
+    /// # Returns
+    /// The number of protocols that were actually modified (tag added)
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// let ids = vec!["id1".to_string(), "id2".to_string()];
+    /// let count = storage.bulk_add_tag_to_protocols(&ids, "morning".to_string())?;
+    /// println!("Added tag to {} protocols", count);
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn bulk_add_tag_to_protocols(&self, protocol_ids: &[String], tag: String) -> Result<usize> {
+        if protocol_ids.is_empty() {
+            return Ok(0);
+        }
+
+        let mut modified_count = 0;
+
+        for protocol_id in protocol_ids {
+            if let Ok(Some(mut protocol)) = self.get_protocol(protocol_id) {
+                // Only update if tag doesn't already exist
+                if !protocol.tags.contains(&tag) {
+                    protocol.tags.push(tag.clone());
+                    protocol.updated_at = now_timestamp();
+                    if self.upsert_protocol(&protocol).is_ok() {
+                        modified_count += 1;
+                    }
+                }
+            }
+        }
+
+        Ok(modified_count)
+    }
+
+    /// Bulk toggle favorite status for multiple protocols
+    ///
+    /// Sets the favorite status for multiple protocols to the specified value.
+    /// Updates timestamps for modified protocols.
+    ///
+    /// # Arguments
+    /// * `protocol_ids` - Slice of protocol IDs to update
+    /// * `is_favorite` - The favorite status to set (true = favorite, false = unfavorite)
+    ///
+    /// # Returns
+    /// The number of protocols that were actually modified
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// let ids = vec!["id1".to_string(), "id2".to_string()];
+    /// let count = storage.bulk_toggle_favorite_protocols(&ids, true)?;
+    /// println!("Favorited {} protocols", count);
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn bulk_toggle_favorite_protocols(&self, protocol_ids: &[String], is_favorite: bool) -> Result<usize> {
+        if protocol_ids.is_empty() {
+            return Ok(0);
+        }
+
+        let mut modified_count = 0;
+
+        for protocol_id in protocol_ids {
+            if let Ok(Some(mut protocol)) = self.get_protocol(protocol_id) {
+                // Only update if status is different
+                if protocol.is_favorite != is_favorite {
+                    protocol.is_favorite = is_favorite;
+                    protocol.updated_at = now_timestamp();
+                    if self.upsert_protocol(&protocol).is_ok() {
+                        modified_count += 1;
+                    }
+                }
+            }
+        }
+
+        Ok(modified_count)
+    }
+
+    /// Perform comprehensive database health check
+    ///
+    /// Runs PRAGMA quick_check to verify database integrity and collects
+    /// diagnostic information about the database state.
+    ///
+    /// # Returns
+    /// - `HealthReport` with detailed diagnostics including:
+    ///   - Integrity check results (ok/corrupted)
+    ///   - Database size in MB
+    ///   - WAL mode status (should be enabled)
+    ///   - Foreign keys status (should be enabled)
+    ///   - Page count and size information
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// let report = storage.health_check()?;
+    /// if report.is_healthy {
+    ///     println!("Database OK: {:.2} MB", report.size_mb);
+    /// } else {
+    ///     eprintln!("Database corrupted: {}", report.integrity_result);
+    /// }
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    ///
+    /// # Notes
+    /// - Uses PRAGMA quick_check (faster than full integrity_check)
+    /// - Should be run on startup and before critical operations
+    /// - Non-fatal issues are logged as warnings
+    pub fn health_check(&self) -> Result<HealthReport> {
+        let conn = self.open_connection()?;
+        let mut report = HealthReport::new();
+
+        // 1. Run quick integrity check (faster than full integrity_check)
+        let integrity: String = conn
+            .query_row("PRAGMA quick_check", [], |row| row.get(0))
+            .context("Failed to run integrity check")?;
+
+        report.is_healthy = integrity == "ok";
+        report.integrity_result = integrity;
+
+        // 2. Get database size information
+        let page_count: i64 = conn
+            .query_row("PRAGMA page_count", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let page_size: i64 = conn
+            .query_row("PRAGMA page_size", [], |row| row.get(0))
+            .unwrap_or(4096);
+
+        report.page_count = page_count;
+        report.page_size = page_size;
+        report.size_mb = (page_count * page_size) as f64 / 1_048_576.0;
+
+        // 3. Check journal mode (should be WAL)
+        let journal_mode: String = conn
+            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+            .unwrap_or_else(|_| String::from("unknown"));
+
+        report.wal_mode = journal_mode.to_lowercase() == "wal";
+
+        // 4. Check foreign keys (should be ON)
+        let foreign_keys: i64 = conn
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        report.foreign_keys_enabled = foreign_keys == 1;
+
+        // 5. Update timestamp
+        report.last_checked = now_timestamp();
+
+        // Log health check results
+        if report.is_healthy {
+            info!(
+                "Database health check: OK ({:.2} MB, {} pages)",
+                report.size_mb, report.page_count
+            );
+        } else {
+            tracing::error!(
+                "Database corruption detected: {}",
+                report.integrity_result
+            );
+        }
+
+        Ok(report)
+    }
+
+    /// Verify database integrity before critical operations
+    ///
+    /// Runs a health check and returns an error if the database is corrupted.
+    /// This is a convenience wrapper around `health_check()` for use in
+    /// critical code paths where database corruption should halt execution.
+    ///
+    /// # Returns
+    /// - `Ok(())` if database is healthy
+    /// - `Err` if database integrity check fails or database is corrupted
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// // Verify integrity before backup
+    /// storage.verify_integrity()?;
+    /// // Safe to proceed with backup
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    ///
+    /// # Notes
+    /// - Always called before critical operations (backups, exports)
+    /// - Logs warnings for non-critical issues (WAL mode, foreign keys)
+    /// - Fails fast on corruption to prevent data loss
+    pub fn verify_integrity(&self) -> Result<()> {
+        let report = self.health_check()?;
+
+        if !report.is_healthy {
+            return Err(anyhow::anyhow!(
+                "Database integrity check failed: {}",
+                report.integrity_result
+            ));
+        }
+
+        if !report.wal_mode {
+            tracing::warn!("Database is not using WAL mode");
+        }
+
+        if !report.foreign_keys_enabled {
+            tracing::warn!("Foreign keys are not enabled");
+        }
+
+        Ok(())
+    }
+
+    /// Optimize database performance and reclaim unused space
+    ///
+    /// Performs three optimization operations:
+    /// 1. PRAGMA optimize - Updates query planner statistics
+    /// 2. PRAGMA incremental_vacuum - Reclaims free space
+    /// 3. ANALYZE - Gathers table statistics for query optimization
+    ///
+    /// # When to Run
+    /// - Periodically (weekly recommended for active databases)
+    /// - After bulk delete/update operations
+    /// - When `DatabaseStats::should_vacuum()` returns true
+    /// - Before creating backups for optimal size
+    ///
+    /// # Returns
+    /// - `Ok(())` if all optimization steps succeed
+    /// - `Err` if any optimization step fails
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// // Run weekly optimization
+    /// storage.optimize()?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    ///
+    /// # Performance Notes
+    /// - Uses incremental vacuum (non-blocking)
+    /// - Safe to run while database is in use
+    /// - May take several seconds on large databases
+    /// - Does NOT require exclusive lock
+    pub fn optimize(&self) -> Result<()> {
+        let conn = self.open_connection()?;
+
+        info!("Running database optimization...");
+
+        // 1. Run PRAGMA optimize to update query planner statistics
+        conn.execute("PRAGMA optimize", [])
+            .context("Failed to run PRAGMA optimize")?;
+
+        // 2. Perform incremental vacuum to reclaim space
+        conn.execute("PRAGMA incremental_vacuum", [])
+            .context("Failed to run incremental vacuum")?;
+
+        // 3. Analyze database for query optimization
+        conn.execute("ANALYZE", [])
+            .context("Failed to run ANALYZE")?;
+
+        info!("Database optimization complete");
+        Ok(())
+    }
+
+    /// Checkpoint the Write-Ahead Log (WAL) file
+    ///
+    /// Merges WAL changes into the main database file. This is important for:
+    /// - Reducing WAL file size
+    /// - Ensuring changes are persisted to main database
+    /// - Preparing for backups (ensures complete state)
+    ///
+    /// # Arguments
+    /// * `mode` - Checkpoint mode (case-insensitive):
+    ///   - `PASSIVE` - Checkpoint without blocking readers/writers (default)
+    ///   - `FULL` - Wait for readers, then checkpoint
+    ///   - `RESTART` - Full checkpoint + restart WAL
+    ///   - `TRUNCATE` - Full checkpoint + truncate WAL to zero bytes
+    ///   - Invalid modes default to `PASSIVE`
+    ///
+    /// # Returns
+    /// - `Ok(())` if checkpoint succeeds
+    /// - `Err` if checkpoint operation fails
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// // Safe checkpoint without blocking
+    /// storage.checkpoint_wal("PASSIVE")?;
+    ///
+    /// // Full checkpoint before backup
+    /// storage.checkpoint_wal("TRUNCATE")?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    ///
+    /// # When to Run
+    /// - Automatically runs every 1000 pages (configured in pragmas)
+    /// - Before creating backups
+    /// - When `DatabaseStats::should_checkpoint()` returns true
+    /// - After bulk write operations
+    ///
+    /// # Performance Notes
+    /// - PASSIVE: Non-blocking, may not complete fully
+    /// - FULL/RESTART/TRUNCATE: May block briefly
+    /// - Auto-checkpoint is configured to run every 1000 pages
+    pub fn checkpoint_wal(&self, mode: &str) -> Result<()> {
+        let conn = self.open_connection()?;
+
+        let checkpoint_mode = match mode.to_uppercase().as_str() {
+            "PASSIVE" => "PASSIVE",
+            "FULL" => "FULL",
+            "RESTART" => "RESTART",
+            "TRUNCATE" => "TRUNCATE",
+            _ => {
+                tracing::warn!("Unknown checkpoint mode '{}', using PASSIVE", mode);
+                "PASSIVE"
+            }
+        };
+
+        info!("Checkpointing WAL (mode: {})", checkpoint_mode);
+
+        // PRAGMA wal_checkpoint returns (busy, log, checkpointed) as results
+        // We use query_row but ignore the results
+        conn.query_row(&format!("PRAGMA wal_checkpoint({})", checkpoint_mode), [], |_row| Ok(()))
+            .context("Failed to checkpoint WAL")?;
+
+        Ok(())
+    }
+
+    /// Get detailed database statistics for monitoring and maintenance
+    ///
+    /// Collects comprehensive metrics about database size, fragmentation,
+    /// and WAL usage. Use these statistics to determine when maintenance
+    /// operations (vacuum, checkpoint) should be performed.
+    ///
+    /// # Returns
+    /// `DatabaseStats` containing:
+    /// - `page_count` - Total number of database pages
+    /// - `page_size` - Size of each page in bytes (typically 4096)
+    /// - `total_size_mb` - Total database size in megabytes
+    /// - `freelist_pages` - Number of unused pages (fragmentation)
+    /// - `wasted_space_mb` - Size of wasted space from fragmentation
+    /// - `wal_size_mb` - Current WAL file size in megabytes
+    ///
+    /// # Helper Methods
+    /// `DatabaseStats` provides helper methods:
+    /// - `fragmentation_percentage()` - Percentage of database that is wasted space
+    /// - `should_vacuum()` - Returns true if >10% fragmented or >50MB wasted
+    /// - `should_checkpoint()` - Returns true if WAL is >10MB
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// let stats = storage.get_stats()?;
+    /// println!("Database: {:.2} MB", stats.total_size_mb);
+    /// println!("Fragmentation: {:.1}%", stats.fragmentation_percentage());
+    ///
+    /// if stats.should_vacuum() {
+    ///     storage.optimize()?;
+    /// }
+    /// if stats.should_checkpoint() {
+    ///     storage.checkpoint_wal("TRUNCATE")?;
+    /// }
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    ///
+    /// # Use Cases
+    /// - Monitoring database health dashboards
+    /// - Automated maintenance scheduling
+    /// - Performance troubleshooting
+    /// - Capacity planning
+    pub fn get_stats(&self) -> Result<DatabaseStats> {
+        let conn = self.open_connection()?;
+
+        let page_count: i64 = conn
+            .query_row("PRAGMA page_count", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let page_size: i64 = conn
+            .query_row("PRAGMA page_size", [], |row| row.get(0))
+            .unwrap_or(4096);
+
+        let freelist_count: i64 = conn
+            .query_row("PRAGMA freelist_count", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let wal_size: i64 = {
+            let wal_path = format!("{}-wal", self.db_path.display());
+            std::fs::metadata(&wal_path)
+                .map(|m| m.len() as i64)
+                .unwrap_or(0)
+        };
+
+        Ok(DatabaseStats {
+            page_count,
+            page_size,
+            total_size_mb: (page_count * page_size) as f64 / 1_048_576.0,
+            freelist_pages: freelist_count,
+            wasted_space_mb: (freelist_count * page_size) as f64 / 1_048_576.0,
+            wal_size_mb: wal_size as f64 / 1_048_576.0,
+        })
     }
 
     /// Get a database connection for advanced operations
@@ -259,6 +1034,376 @@ impl StorageManager {
         let conn = self.open_connection()?;
         conn.execute("DELETE FROM dose_logs WHERE id = ?1", params![log_id])
             .context("Failed to delete dose log")?;
+        Ok(())
+    }
+
+    /// Save or update a body metric entry
+    ///
+    /// Stores body composition metrics like weight, body fat %, muscle mass, etc.
+    /// Encrypts all data before storage.
+    ///
+    /// # Arguments
+    /// * `metric` - The body metric entry to save
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # use peptrack_core::models::BodyMetric;
+    /// # use time::OffsetDateTime;
+    /// # let storage = todo!();
+    /// let mut metric = BodyMetric::new(OffsetDateTime::now_utc());
+    /// metric.weight_kg = Some(75.5);
+    /// metric.body_fat_percentage = Some(15.2);
+    /// storage.upsert_body_metric(&metric)?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn upsert_body_metric(&self, metric: &BodyMetric) -> Result<()> {
+        let conn = self.open_connection()?;
+        let payload = serde_json::to_vec(metric).context("Failed to serialize body metric")?;
+        let encrypted = self.encryption.seal(&payload)?;
+
+        conn.execute(
+            r#"
+            INSERT INTO body_metrics (id, date, payload, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5)
+            ON CONFLICT(id) DO UPDATE SET
+                date = excluded.date,
+                payload = excluded.payload,
+                updated_at = excluded.updated_at;
+            "#,
+            params![
+                metric.id,
+                metric.date.to_string(),
+                encrypted,
+                metric.created_at.to_string(),
+                metric.updated_at.to_string()
+            ],
+        )
+        .context("Failed to upsert body metric")?;
+
+        Ok(())
+    }
+
+    /// List all body metrics ordered by date (most recent first)
+    ///
+    /// Returns all body metric entries from the database, decrypted
+    /// and sorted by measurement date.
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// let metrics = storage.list_body_metrics()?;
+    /// for metric in metrics {
+    ///     println!("Date: {}, Weight: {:?} kg", metric.date, metric.weight_kg);
+    /// }
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn list_body_metrics(&self) -> Result<Vec<BodyMetric>> {
+        let conn = self.open_connection()?;
+        let mut stmt = conn.prepare("SELECT payload FROM body_metrics ORDER BY date DESC")?;
+        let mut rows = stmt
+            .query([])
+            .context("Unable to run body metrics list query")?;
+
+        let mut metrics = Vec::new();
+        while let Some(row) = rows.next()? {
+            let blob: Vec<u8> = row.get(0)?;
+            let decrypted = self.encryption.open(&blob)?;
+            let metric: BodyMetric = serde_json::from_slice(&decrypted)
+                .context("Failed to deserialize body metric")?;
+            metrics.push(metric);
+        }
+
+        Ok(metrics)
+    }
+
+    /// Get a specific body metric by ID
+    ///
+    /// Returns the body metric if found, None otherwise.
+    ///
+    /// # Arguments
+    /// * `metric_id` - The ID of the body metric to retrieve
+    pub fn get_body_metric(&self, metric_id: &str) -> Result<Option<BodyMetric>> {
+        let conn = self.open_connection()?;
+        let mut stmt = conn.prepare("SELECT payload FROM body_metrics WHERE id = ?1")?;
+
+        let result = stmt.query_row(params![metric_id], |row| {
+            let blob: Vec<u8> = row.get(0)?;
+            Ok(blob)
+        });
+
+        match result {
+            Ok(blob) => {
+                let decrypted = self.encryption.open(&blob)?;
+                let metric: BodyMetric = serde_json::from_slice(&decrypted)
+                    .context("Failed to deserialize body metric")?;
+                Ok(Some(metric))
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Delete a body metric entry
+    ///
+    /// Permanently removes a body metric from the database.
+    ///
+    /// # Arguments
+    /// * `metric_id` - The ID of the body metric to delete
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// storage.delete_body_metric("metric-id")?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn delete_body_metric(&self, metric_id: &str) -> Result<()> {
+        let conn = self.open_connection()?;
+        conn.execute("DELETE FROM body_metrics WHERE id = ?1", params![metric_id])
+            .context("Failed to delete body metric")?;
+        Ok(())
+    }
+
+    /// Bulk delete multiple body metrics
+    ///
+    /// Deletes multiple body metric entries in a single transaction.
+    ///
+    /// # Arguments
+    /// * `metric_ids` - Slice of body metric IDs to delete
+    ///
+    /// # Returns
+    /// The number of metrics actually deleted
+    pub fn bulk_delete_body_metrics(&self, metric_ids: &[String]) -> Result<usize> {
+        if metric_ids.is_empty() {
+            return Ok(0);
+        }
+
+        let conn = self.open_connection()?;
+        let mut total_deleted = 0;
+
+        let tx = conn.unchecked_transaction()?;
+        {
+            let mut stmt = tx.prepare("DELETE FROM body_metrics WHERE id = ?1")?;
+            for metric_id in metric_ids {
+                let rows = stmt.execute(params![metric_id])?;
+                total_deleted += rows;
+            }
+        }
+        tx.commit()?;
+
+        Ok(total_deleted)
+    }
+
+    // ===== Side Effects Methods =====
+
+    /// Insert or update a side effect entry
+    ///
+    /// Creates a new side effect or updates an existing one based on the ID.
+    /// All data is encrypted before storage.
+    ///
+    /// # Arguments
+    /// * `side_effect` - The side effect entry to save
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::{StorageManager, SideEffect};
+    /// # use time::OffsetDateTime;
+    /// # let storage = todo!();
+    /// let mut effect = SideEffect::new(OffsetDateTime::now_utc(), "mild", "nausea");
+    /// effect.description = Some("Mild nausea after dose".to_string());
+    /// storage.upsert_side_effect(&effect)?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn upsert_side_effect(&self, side_effect: &SideEffect) -> Result<()> {
+        let conn = self.open_connection()?;
+        let payload = serde_json::to_vec(side_effect).context("Failed to serialize side effect")?;
+        let encrypted = self.encryption.seal(&payload)?;
+
+        conn.execute(
+            r#"INSERT INTO side_effects (id, protocol_id, dose_log_id, date, severity, payload, created_at, updated_at)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+               ON CONFLICT(id) DO UPDATE SET
+                   protocol_id = excluded.protocol_id,
+                   dose_log_id = excluded.dose_log_id,
+                   date = excluded.date,
+                   severity = excluded.severity,
+                   payload = excluded.payload,
+                   updated_at = excluded.updated_at;"#,
+            params![
+                side_effect.id,
+                side_effect.protocol_id,
+                side_effect.dose_log_id,
+                side_effect.date.to_string(),
+                side_effect.severity,
+                encrypted,
+                side_effect.created_at.to_string(),
+                side_effect.updated_at.to_string(),
+            ],
+        )
+        .context("Failed to upsert side effect")?;
+
+        Ok(())
+    }
+
+    /// List all side effects, ordered by date (most recent first)
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::StorageManager;
+    /// # let storage = todo!();
+    /// let effects = storage.list_side_effects()?;
+    /// for effect in effects {
+    ///     println!("{}: {}", effect.symptom, effect.severity);
+    /// }
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn list_side_effects(&self) -> Result<Vec<SideEffect>> {
+        let conn = self.open_connection()?;
+        let mut stmt = conn
+            .prepare("SELECT payload FROM side_effects ORDER BY date DESC")
+            .context("Failed to prepare side effects query")?;
+
+        let effects = stmt
+            .query_map([], |row| {
+                let blob: Vec<u8> = row.get(0)?;
+                Ok(blob)
+            })?
+            .filter_map(|result| {
+                result.ok().and_then(|blob| {
+                    self.encryption
+                        .open(&blob)
+                        .ok()
+                        .and_then(|decrypted| {
+                            let effect: SideEffect = serde_json::from_slice(&decrypted)
+                                .map_err(|e| {
+                                    tracing::warn!("Failed to deserialize side effect: {}", e);
+                                    e
+                                })
+                                .ok()?;
+                            Some(effect)
+                        })
+                })
+            })
+            .collect();
+
+        Ok(effects)
+    }
+
+    /// Get a specific side effect by ID
+    ///
+    /// # Arguments
+    /// * `effect_id` - The ID of the side effect to retrieve
+    ///
+    /// # Returns
+    /// `Some(SideEffect)` if found, `None` if not found
+    pub fn get_side_effect(&self, effect_id: &str) -> Result<Option<SideEffect>> {
+        let conn = self.open_connection()?;
+        let mut stmt = conn.prepare("SELECT payload FROM side_effects WHERE id = ?1")?;
+
+        let result = stmt.query_row(params![effect_id], |row| {
+            let blob: Vec<u8> = row.get(0)?;
+            Ok(blob)
+        });
+
+        match result {
+            Ok(blob) => {
+                let decrypted = self.encryption.open(&blob)?;
+                let effect: SideEffect = serde_json::from_slice(&decrypted)
+                    .context("Failed to deserialize side effect")?;
+                Ok(Some(effect))
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// List side effects for a specific protocol
+    ///
+    /// # Arguments
+    /// * `protocol_id` - The ID of the protocol to filter by
+    pub fn list_side_effects_by_protocol(&self, protocol_id: &str) -> Result<Vec<SideEffect>> {
+        let conn = self.open_connection()?;
+        let mut stmt = conn
+            .prepare("SELECT payload FROM side_effects WHERE protocol_id = ?1 ORDER BY date DESC")
+            .context("Failed to prepare side effects by protocol query")?;
+
+        let effects = stmt
+            .query_map(params![protocol_id], |row| {
+                let blob: Vec<u8> = row.get(0)?;
+                Ok(blob)
+            })?
+            .filter_map(|result| {
+                result.ok().and_then(|blob| {
+                    self.encryption
+                        .open(&blob)
+                        .ok()
+                        .and_then(|decrypted| serde_json::from_slice(&decrypted).ok())
+                })
+            })
+            .collect();
+
+        Ok(effects)
+    }
+
+    /// Delete a side effect entry
+    ///
+    /// Permanently removes a side effect from the database.
+    ///
+    /// # Arguments
+    /// * `effect_id` - The ID of the side effect to delete
+    pub fn delete_side_effect(&self, effect_id: &str) -> Result<()> {
+        let conn = self.open_connection()?;
+        conn.execute("DELETE FROM side_effects WHERE id = ?1", params![effect_id])
+            .context("Failed to delete side effect")?;
+        Ok(())
+    }
+
+    /// Bulk delete multiple side effects
+    ///
+    /// Deletes multiple side effect entries in a single transaction.
+    ///
+    /// # Arguments
+    /// * `effect_ids` - Slice of side effect IDs to delete
+    ///
+    /// # Returns
+    /// The number of side effects actually deleted
+    pub fn bulk_delete_side_effects(&self, effect_ids: &[String]) -> Result<usize> {
+        if effect_ids.is_empty() {
+            return Ok(0);
+        }
+
+        let conn = self.open_connection()?;
+        let mut total_deleted = 0;
+
+        let tx = conn.unchecked_transaction()?;
+        {
+            let mut stmt = tx.prepare("DELETE FROM side_effects WHERE id = ?1")?;
+            for effect_id in effect_ids {
+                let rows = stmt.execute(params![effect_id])?;
+                total_deleted += rows;
+            }
+        }
+        tx.commit()?;
+
+        Ok(total_deleted)
+    }
+
+    /// Toggle the resolved status of a side effect
+    ///
+    /// # Arguments
+    /// * `effect_id` - The ID of the side effect
+    /// * `resolved` - Whether the side effect is resolved
+    pub fn update_side_effect_resolved(&self, effect_id: &str, resolved: bool) -> Result<()> {
+        let mut effect = self
+            .get_side_effect(effect_id)?
+            .ok_or_else(|| anyhow::anyhow!("Side effect not found"))?;
+
+        effect.resolved = resolved;
+        effect.updated_at = OffsetDateTime::now_utc();
+
+        self.upsert_side_effect(&effect)?;
         Ok(())
     }
 
@@ -756,6 +1901,11 @@ mod tests {
         })
         .expect("storage manager");
         storage.initialize().expect("init db");
+
+        // Keep temp directory alive by leaking it
+        // This is acceptable for tests and prevents directory cleanup issues
+        std::mem::forget(tmp);
+
         storage
     }
 
@@ -834,7 +1984,7 @@ mod tests {
         let protocol = PeptideProtocol::new("Test Protocol", "BPC-157");
         storage.upsert_protocol(&protocol).expect("upsert protocol");
 
-        let dose = DoseLog::new(&protocol.id, "Left Shoulder", 0.5);
+        let dose = DoseLog::new(&protocol.id, &"Left Shoulder".to_string(), 0.5);
         storage.append_dose_log(&dose).expect("append dose");
 
         let doses = storage.list_dose_logs().expect("list doses");
@@ -851,9 +2001,9 @@ mod tests {
         storage.upsert_protocol(&protocol1).expect("upsert protocol1");
         storage.upsert_protocol(&protocol2).expect("upsert protocol2");
 
-        let dose1 = DoseLog::new(&protocol1.id, "Site A", 0.5);
-        let dose2 = DoseLog::new(&protocol2.id, "Site B", 1.0);
-        let dose3 = DoseLog::new(&protocol1.id, "Site C", 0.75);
+        let dose1 = DoseLog::new(&protocol1.id, &"Site A".to_string(), 0.5);
+        let dose2 = DoseLog::new(&protocol2.id, &"Site B".to_string(), 1.0);
+        let dose3 = DoseLog::new(&protocol1.id, &"Site C".to_string(), 0.75);
 
         storage.append_dose_log(&dose1).expect("append dose1");
         storage.append_dose_log(&dose2).expect("append dose2");
@@ -872,7 +2022,7 @@ mod tests {
         let protocol = PeptideProtocol::new("Test Protocol", "BPC-157");
         storage.upsert_protocol(&protocol).expect("upsert protocol");
 
-        let dose = DoseLog::new(&protocol.id, "Site", 0.5);
+        let dose = DoseLog::new(&protocol.id, &"Site".to_string(), 0.5);
         let dose_id = dose.id.clone();
         storage.append_dose_log(&dose).expect("append dose");
 
@@ -1084,7 +2234,7 @@ mod tests {
         let supplier = Supplier::new("TestSupplier");
         storage.upsert_supplier(&supplier).expect("upsert supplier");
 
-        let price = PriceHistory::new(&supplier.id, "BPC-157", 2.5);
+        let price = PriceHistory::new(&supplier.id, &"BPC-157".to_string(), 2.5);
         storage.add_price_history(&price).expect("add price");
 
         let prices = storage
@@ -1100,9 +2250,9 @@ mod tests {
         let supplier = Supplier::new("TestSupplier");
         storage.upsert_supplier(&supplier).expect("upsert supplier");
 
-        let price1 = PriceHistory::new(&supplier.id, "BPC-157", 2.5);
-        let price2 = PriceHistory::new(&supplier.id, "TB-500", 3.0);
-        let price3 = PriceHistory::new(&supplier.id, "BPC-157", 2.6);
+        let price1 = PriceHistory::new(&supplier.id, &"BPC-157".to_string(), 2.5);
+        let price2 = PriceHistory::new(&supplier.id, &"TB-500".to_string(), 3.0);
+        let price3 = PriceHistory::new(&supplier.id, &"BPC-157".to_string(), 2.6);
 
         storage.add_price_history(&price1).expect("add");
         storage.add_price_history(&price2).expect("add");
@@ -1121,9 +2271,9 @@ mod tests {
         let supplier = Supplier::new("TestSupplier");
         storage.upsert_supplier(&supplier).expect("upsert supplier");
 
-        let price1 = PriceHistory::new(&supplier.id, "BPC-157", 2.5);
+        let price1 = PriceHistory::new(&supplier.id, &"BPC-157".to_string(), 2.5);
         std::thread::sleep(std::time::Duration::from_millis(10));
-        let price2 = PriceHistory::new(&supplier.id, "BPC-157", 2.6);
+        let price2 = PriceHistory::new(&supplier.id, &"BPC-157".to_string(), 2.6);
 
         storage.add_price_history(&price1).expect("add");
         storage.add_price_history(&price2).expect("add");
@@ -1294,11 +2444,11 @@ mod tests {
         let storage = create_test_storage();
         for i in 1..=5 {
             let summary = SummaryHistory::new(
-                &format!("Summary {}", i),
-                "content",
-                "output",
-                "markdown",
-                "claude",
+                format!("Summary {}", i),
+                "content".to_string(),
+                "output".to_string(),
+                "markdown".to_string(),
+                "claude".to_string(),
             );
             storage.save_summary(&summary).expect("save");
         }
@@ -1312,11 +2462,11 @@ mod tests {
         let storage = create_test_storage();
         for i in 1..=10 {
             let summary = SummaryHistory::new(
-                &format!("Summary {}", i),
-                "content",
-                "output",
-                "markdown",
-                "claude",
+                format!("Summary {}", i),
+                "content".to_string(),
+                "output".to_string(),
+                "markdown".to_string(),
+                "claude".to_string(),
             );
             storage.save_summary(&summary).expect("save");
         }
@@ -1375,5 +2525,181 @@ mod tests {
         let storage = create_test_storage();
         // Initialize again - should not error
         storage.initialize().expect("initialize again");
+    }
+
+    // =============================================================================
+    // Health & Diagnostics Tests
+    // =============================================================================
+
+    #[test]
+    fn health_check_returns_healthy_report() {
+        let storage = create_test_storage();
+        let report = storage.health_check().expect("health check");
+
+        // Fresh database should be healthy
+        assert!(report.is_healthy);
+        assert_eq!(report.integrity_result, "ok");
+        assert!(report.wal_mode);
+        assert!(report.foreign_keys_enabled);
+        assert!(report.size_mb > 0.0);
+        assert!(report.page_count > 0);
+        assert!(report.page_size > 0);
+    }
+
+    #[test]
+    fn verify_integrity_succeeds_on_healthy_database() {
+        let storage = create_test_storage();
+        storage.verify_integrity().expect("integrity check should pass");
+    }
+
+    #[test]
+    fn get_stats_returns_valid_statistics() {
+        let storage = create_test_storage();
+        let stats = storage.get_stats().expect("get stats");
+
+        assert!(stats.page_count > 0);
+        assert!(stats.page_size > 0);
+        assert!(stats.total_size_mb > 0.0);
+        assert!(stats.freelist_pages >= 0);
+        assert!(stats.wasted_space_mb >= 0.0);
+        assert!(stats.wal_size_mb >= 0.0);
+    }
+
+    #[test]
+    fn optimize_database_runs_successfully() {
+        let storage = create_test_storage();
+
+        // Add some data first
+        let protocol = PeptideProtocol::new("Test Protocol", "BPC-157");
+        storage.upsert_protocol(&protocol).expect("upsert");
+
+        // Run optimization
+        storage.optimize().expect("optimize should succeed");
+    }
+
+    #[test]
+    fn checkpoint_wal_passive_mode() {
+        let storage = create_test_storage();
+
+        // Add some data to create WAL entries
+        let protocol = PeptideProtocol::new("Test Protocol", "BPC-157");
+        storage.upsert_protocol(&protocol).expect("upsert");
+
+        // Checkpoint with PASSIVE mode
+        storage.checkpoint_wal("PASSIVE").expect("checkpoint should succeed");
+    }
+
+    #[test]
+    fn checkpoint_wal_full_mode() {
+        let storage = create_test_storage();
+
+        // Add some data to create WAL entries
+        let protocol = PeptideProtocol::new("Test Protocol", "BPC-157");
+        storage.upsert_protocol(&protocol).expect("upsert");
+
+        // Checkpoint with FULL mode
+        storage.checkpoint_wal("FULL").expect("checkpoint should succeed");
+    }
+
+    #[test]
+    fn checkpoint_wal_invalid_mode_defaults_to_passive() {
+        let storage = create_test_storage();
+
+        // Invalid mode should default to PASSIVE and not error
+        storage.checkpoint_wal("INVALID").expect("checkpoint should succeed with default");
+    }
+
+    #[test]
+    fn database_stats_fragmentation_calculation() {
+        let storage = create_test_storage();
+        let stats = storage.get_stats().expect("get stats");
+
+        // Fragmentation should be between 0 and 100
+        let fragmentation = stats.fragmentation_percentage();
+        assert!(fragmentation >= 0.0 && fragmentation <= 100.0);
+    }
+
+    #[test]
+    fn database_stats_recommendations() {
+        let storage = create_test_storage();
+        let stats = storage.get_stats().expect("get stats");
+
+        // Fresh database should not need vacuum or checkpoint
+        assert!(!stats.should_vacuum(), "Fresh database shouldn't need vacuum");
+        assert!(!stats.should_checkpoint(), "Fresh database shouldn't need checkpoint");
+    }
+
+    #[test]
+    fn health_check_with_data_operations() {
+        let storage = create_test_storage();
+
+        // Add various types of data
+        let protocol = PeptideProtocol::new("Test Protocol", "BPC-157");
+        storage.upsert_protocol(&protocol).expect("upsert protocol");
+
+        let dose_log = DoseLog::new(&protocol.id, &"Left Abdomen".to_string(), 5.0);
+        storage.append_dose_log(&dose_log).expect("append dose");
+
+        // Health check should still pass
+        let report = storage.health_check().expect("health check");
+        assert!(report.is_healthy);
+        assert_eq!(report.integrity_result, "ok");
+    }
+
+    #[test]
+    fn optimize_after_bulk_operations() {
+        let storage = create_test_storage();
+
+        // Perform bulk operations
+        for i in 0..100 {
+            let protocol = PeptideProtocol::new(
+                &format!("Protocol {}", i),
+                &format!("Peptide {}", i),
+            );
+            storage.upsert_protocol(&protocol).expect("upsert");
+        }
+
+        // Get stats before optimization
+        let _stats_before = storage.get_stats().expect("stats before");
+
+        // Optimize
+        storage.optimize().expect("optimize");
+
+        // Get stats after optimization
+        let stats_after = storage.get_stats().expect("stats after");
+
+        // Stats should be available (exact values may vary)
+        assert!(stats_after.page_count > 0);
+    }
+
+    #[test]
+    fn cache_size_is_at_least_64mb() {
+        let storage = create_test_storage();
+        let conn = storage.connection().expect("get connection");
+
+        // Query cache_size pragma
+        let cache_size: i64 = conn
+            .query_row("PRAGMA cache_size", [], |row| row.get(0))
+            .expect("query cache_size");
+
+        // Negative values are in KB, positive are in pages
+        // We configured -64000 (64MB)
+        if cache_size < 0 {
+            // Negative = KB
+            let cache_kb = cache_size.abs();
+            assert!(
+                cache_kb >= 64000,
+                "Cache size should be at least 64MB (64000 KB), got {} KB",
+                cache_kb
+            );
+        } else {
+            // Positive = pages (typically 4KB each)
+            // 64MB / 4KB = 16000 pages minimum
+            assert!(
+                cache_size >= 16000,
+                "Cache size should be at least 64MB (16000 pages), got {} pages",
+                cache_size
+            );
+        }
     }
 }

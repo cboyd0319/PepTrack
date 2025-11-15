@@ -7,19 +7,22 @@ use tracing::info;
 use commands::{
     ai::{check_ai_availability, summarize_text},
     analytics::{
-        add_price_history, clear_all_alerts, compare_prices, create_alert, delete_summary,
+        add_price_history, check_inventory_and_create_alerts, clear_all_alerts, compare_prices, create_alert, delete_summary,
         dismiss_alert, get_latest_price, list_alerts, list_price_history, list_summary_history,
-        mark_alert_read, save_summary,
+        mark_alert_read, predict_inventory_depletion, save_summary,
     },
     backup::{export_backup_data, get_backup_file_path},
+    body_metrics::{bulk_delete_body_metrics, delete_body_metric, get_body_metric, list_body_metrics, log_body_metric, update_body_metric},
     defaults::{get_default_peptides, populate_default_peptides},
-    doses::{delete_dose_log, list_dose_logs, list_dose_logs_for_protocol, log_dose},
+    doses::{bulk_delete_doses, delete_dose_log, list_dose_logs, list_dose_logs_for_protocol, log_dose},
+    side_effects::{bulk_delete_side_effects, delete_side_effect, get_side_effect, list_side_effects, list_side_effects_by_protocol, log_side_effect, toggle_side_effect_resolved, update_side_effect},
     drive::{
         check_drive_status, complete_drive_oauth, disconnect_drive, start_drive_oauth,
         upload_to_drive, OAuthState,
     },
+    health::{checkpoint_database, get_database_health, get_database_stats, optimize_database, verify_database_integrity},
     literature::{list_literature, open_external_url, search_cached_literature, search_literature},
-    protocols::{list_protocols, save_protocol},
+    protocols::{add_protocol_tag, bulk_add_tag_to_protocols, bulk_delete_protocols, bulk_toggle_favorite_protocols, delete_protocol, list_protocols, remove_protocol_tag, save_protocol, toggle_protocol_favorite, update_protocol_tags},
     restore::{preview_backup, restore_from_backup},
     schedules::{
         create_dose_schedule, delete_dose_schedule, get_pending_dose_reminders,
@@ -61,6 +64,31 @@ pub fn run() {
             let scheduler_state = SchedulerState::new();
             let state_arc = std::sync::Arc::new(state);
 
+            // Run database health check on startup
+            info!("Running startup database health check...");
+            match state_arc.storage.health_check() {
+                Ok(report) if report.is_healthy => {
+                    info!(
+                        "✓ Database health check: OK ({:.2} MB, WAL: {}, FK: {})",
+                        report.size_mb,
+                        report.wal_mode,
+                        report.foreign_keys_enabled
+                    );
+                }
+                Ok(report) => {
+                    tracing::error!(
+                        "✗ Database corruption detected: {}",
+                        report.integrity_result
+                    );
+                    tracing::error!("Please restore from a backup or contact support");
+                    // Continue loading but warn user
+                }
+                Err(e) => {
+                    tracing::warn!("Health check failed: {:#}", e);
+                    // Non-fatal, continue loading
+                }
+            }
+
             // Store app handle for notifications
             let scheduler_clone_handle = scheduler_state.clone();
             let app_handle = app.handle().clone();
@@ -94,6 +122,14 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_protocols,
             save_protocol,
+            toggle_protocol_favorite,
+            update_protocol_tags,
+            add_protocol_tag,
+            remove_protocol_tag,
+            delete_protocol,
+            bulk_delete_protocols,
+            bulk_add_tag_to_protocols,
+            bulk_toggle_favorite_protocols,
             check_ai_availability,
             summarize_text,
             list_literature,
@@ -104,6 +140,23 @@ pub fn run() {
             list_dose_logs,
             list_dose_logs_for_protocol,
             delete_dose_log,
+            bulk_delete_doses,
+            // Body metrics commands
+            log_body_metric,
+            list_body_metrics,
+            get_body_metric,
+            update_body_metric,
+            delete_body_metric,
+            bulk_delete_body_metrics,
+            // Side effects commands
+            log_side_effect,
+            list_side_effects,
+            get_side_effect,
+            list_side_effects_by_protocol,
+            update_side_effect,
+            toggle_side_effect_resolved,
+            delete_side_effect,
+            bulk_delete_side_effects,
             export_backup_data,
             get_backup_file_path,
             start_drive_oauth,
@@ -145,12 +198,20 @@ pub fn run() {
             save_summary,
             list_summary_history,
             delete_summary,
+            predict_inventory_depletion,
+            check_inventory_and_create_alerts,
             // Dose schedule commands
             create_dose_schedule,
             list_dose_schedules,
             update_dose_schedule,
             delete_dose_schedule,
             get_pending_dose_reminders,
+            // Health & diagnostics commands
+            get_database_health,
+            verify_database_integrity,
+            optimize_database,
+            checkpoint_database,
+            get_database_stats,
             // Default peptides
             get_default_peptides,
             populate_default_peptides
