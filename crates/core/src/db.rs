@@ -9,11 +9,18 @@ use tracing::info;
 
 use crate::encryption::{EnvelopeEncryption, KeyProvider};
 use crate::models::{
-    Alert, DoseLog, HealthReport, InventoryItem, LiteratureEntry, PeptideProtocol,
+    Alert, DatabaseStats, DoseLog, HealthReport, InventoryItem, LiteratureEntry, PeptideProtocol,
     PriceHistory, Supplier, SummaryHistory,
 };
 
 const DEFAULT_DB_NAME: &str = "peptrack.sqlite";
+
+// PepTrack Application ID (unique identifier for this SQLite database)
+// Generated from: "PepTrack".as_bytes() hashed
+const PEPTRACK_APP_ID: i32 = 0x50657054; // "PepT" in hex
+
+// Current schema version for migrations
+const SCHEMA_VERSION: i32 = 2;
 
 pub struct StorageConfig {
     pub data_dir: Option<PathBuf>,
@@ -53,13 +60,79 @@ impl StorageManager {
         let conn = Connection::open(&self.db_path)
             .with_context(|| format!("Unable to open database at {}", self.db_path.display()))?;
 
-        // Enable enhanced safety and integrity features
-        conn.execute_batch(
-            "PRAGMA journal_mode=WAL;
-             PRAGMA foreign_keys=ON;
+        // =====================================================================
+        // COMPREHENSIVE SQLITE CONFIGURATION
+        // Maximum safety, performance, and integrity
+        // =====================================================================
+
+        conn.execute_batch(&format!(
+            "-- ═══════════════════════════════════════════════════════════
+             -- CORE SAFETY & DURABILITY
+             -- ═══════════════════════════════════════════════════════════
+
+             -- Write-Ahead Logging for crash safety & better concurrency
+             PRAGMA journal_mode=WAL;
+
+             -- Maximum durability - fsync after every transaction
              PRAGMA synchronous=FULL;
-             PRAGMA temp_store=MEMORY;"
-        )
+
+             -- Enforce foreign key constraints
+             PRAGMA foreign_keys=ON;
+
+             -- Overwrite deleted data with zeros (security)
+             PRAGMA secure_delete=ON;
+
+             -- Verify database structure on access
+             PRAGMA cell_size_check=ON;
+
+             -- Disable loading of untrusted schemas (SQLite 3.31+)
+             -- Note: May not be supported on older SQLite versions
+             -- PRAGMA trusted_schema=OFF;
+
+             -- ═══════════════════════════════════════════════════════════
+             -- PERFORMANCE OPTIMIZATIONS
+             -- ═══════════════════════════════════════════════════════════
+
+             -- 64MB cache (negative value = kilobytes)
+             PRAGMA cache_size=-64000;
+
+             -- Memory-mapped I/O for faster reads (256MB)
+             PRAGMA mmap_size=268435456;
+
+             -- Store temp tables & indices in memory
+             PRAGMA temp_store=MEMORY;
+
+             -- Wait up to 5 seconds if database is locked
+             PRAGMA busy_timeout=5000;
+
+             -- ═══════════════════════════════════════════════════════════
+             -- MAINTENANCE & OPTIMIZATION
+             -- ═══════════════════════════════════════════════════════════
+
+             -- Auto-vacuum to reclaim space (incremental for better performance)
+             PRAGMA auto_vacuum=INCREMENTAL;
+
+             -- Checkpoint WAL every 1000 pages (auto-merge to main DB)
+             PRAGMA wal_autocheckpoint=1000;
+
+             -- Enable recursive triggers for complex integrity rules
+             PRAGMA recursive_triggers=ON;
+
+             -- ═══════════════════════════════════════════════════════════
+             -- APPLICATION METADATA
+             -- ═══════════════════════════════════════════════════════════
+
+             -- Set unique application ID for this database
+             PRAGMA application_id={};
+
+             -- Track schema version for migrations
+             PRAGMA user_version={};
+
+             -- Ensure UTF-8 encoding
+             PRAGMA encoding='UTF-8';",
+            PEPTRACK_APP_ID,
+            SCHEMA_VERSION
+        ))
         .context("Unable to configure SQLite pragmas")?;
 
         Ok(conn)
@@ -249,7 +322,35 @@ impl StorageManager {
     }
 
     /// Perform comprehensive database health check
-    /// Returns detailed health report including integrity check results
+    ///
+    /// Runs PRAGMA quick_check to verify database integrity and collects
+    /// diagnostic information about the database state.
+    ///
+    /// # Returns
+    /// - `HealthReport` with detailed diagnostics including:
+    ///   - Integrity check results (ok/corrupted)
+    ///   - Database size in MB
+    ///   - WAL mode status (should be enabled)
+    ///   - Foreign keys status (should be enabled)
+    ///   - Page count and size information
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// let report = storage.health_check()?;
+    /// if report.is_healthy {
+    ///     println!("Database OK: {:.2} MB", report.size_mb);
+    /// } else {
+    ///     eprintln!("Database corrupted: {}", report.integrity_result);
+    /// }
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    ///
+    /// # Notes
+    /// - Uses PRAGMA quick_check (faster than full integrity_check)
+    /// - Should be run on startup and before critical operations
+    /// - Non-fatal issues are logged as warnings
     pub fn health_check(&self) -> Result<HealthReport> {
         let conn = self.open_connection()?;
         let mut report = HealthReport::new();
@@ -308,8 +409,30 @@ impl StorageManager {
         Ok(report)
     }
 
-    /// Verify database before critical operations
-    /// Returns Ok if healthy, Err if corrupted
+    /// Verify database integrity before critical operations
+    ///
+    /// Runs a health check and returns an error if the database is corrupted.
+    /// This is a convenience wrapper around `health_check()` for use in
+    /// critical code paths where database corruption should halt execution.
+    ///
+    /// # Returns
+    /// - `Ok(())` if database is healthy
+    /// - `Err` if database integrity check fails or database is corrupted
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// // Verify integrity before backup
+    /// storage.verify_integrity()?;
+    /// // Safe to proceed with backup
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    ///
+    /// # Notes
+    /// - Always called before critical operations (backups, exports)
+    /// - Logs warnings for non-critical issues (WAL mode, foreign keys)
+    /// - Fails fast on corruption to prevent data loss
     pub fn verify_integrity(&self) -> Result<()> {
         let report = self.health_check()?;
 
@@ -329,6 +452,198 @@ impl StorageManager {
         }
 
         Ok(())
+    }
+
+    /// Optimize database performance and reclaim unused space
+    ///
+    /// Performs three optimization operations:
+    /// 1. PRAGMA optimize - Updates query planner statistics
+    /// 2. PRAGMA incremental_vacuum - Reclaims free space
+    /// 3. ANALYZE - Gathers table statistics for query optimization
+    ///
+    /// # When to Run
+    /// - Periodically (weekly recommended for active databases)
+    /// - After bulk delete/update operations
+    /// - When `DatabaseStats::should_vacuum()` returns true
+    /// - Before creating backups for optimal size
+    ///
+    /// # Returns
+    /// - `Ok(())` if all optimization steps succeed
+    /// - `Err` if any optimization step fails
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// // Run weekly optimization
+    /// storage.optimize()?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    ///
+    /// # Performance Notes
+    /// - Uses incremental vacuum (non-blocking)
+    /// - Safe to run while database is in use
+    /// - May take several seconds on large databases
+    /// - Does NOT require exclusive lock
+    pub fn optimize(&self) -> Result<()> {
+        let conn = self.open_connection()?;
+
+        info!("Running database optimization...");
+
+        // 1. Run PRAGMA optimize to update query planner statistics
+        conn.execute("PRAGMA optimize", [])
+            .context("Failed to run PRAGMA optimize")?;
+
+        // 2. Perform incremental vacuum to reclaim space
+        conn.execute("PRAGMA incremental_vacuum", [])
+            .context("Failed to run incremental vacuum")?;
+
+        // 3. Analyze database for query optimization
+        conn.execute("ANALYZE", [])
+            .context("Failed to run ANALYZE")?;
+
+        info!("Database optimization complete");
+        Ok(())
+    }
+
+    /// Checkpoint the Write-Ahead Log (WAL) file
+    ///
+    /// Merges WAL changes into the main database file. This is important for:
+    /// - Reducing WAL file size
+    /// - Ensuring changes are persisted to main database
+    /// - Preparing for backups (ensures complete state)
+    ///
+    /// # Arguments
+    /// * `mode` - Checkpoint mode (case-insensitive):
+    ///   - `PASSIVE` - Checkpoint without blocking readers/writers (default)
+    ///   - `FULL` - Wait for readers, then checkpoint
+    ///   - `RESTART` - Full checkpoint + restart WAL
+    ///   - `TRUNCATE` - Full checkpoint + truncate WAL to zero bytes
+    ///   - Invalid modes default to `PASSIVE`
+    ///
+    /// # Returns
+    /// - `Ok(())` if checkpoint succeeds
+    /// - `Err` if checkpoint operation fails
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// // Safe checkpoint without blocking
+    /// storage.checkpoint_wal("PASSIVE")?;
+    ///
+    /// // Full checkpoint before backup
+    /// storage.checkpoint_wal("TRUNCATE")?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    ///
+    /// # When to Run
+    /// - Automatically runs every 1000 pages (configured in pragmas)
+    /// - Before creating backups
+    /// - When `DatabaseStats::should_checkpoint()` returns true
+    /// - After bulk write operations
+    ///
+    /// # Performance Notes
+    /// - PASSIVE: Non-blocking, may not complete fully
+    /// - FULL/RESTART/TRUNCATE: May block briefly
+    /// - Auto-checkpoint is configured to run every 1000 pages
+    pub fn checkpoint_wal(&self, mode: &str) -> Result<()> {
+        let conn = self.open_connection()?;
+
+        let checkpoint_mode = match mode.to_uppercase().as_str() {
+            "PASSIVE" => "PASSIVE",
+            "FULL" => "FULL",
+            "RESTART" => "RESTART",
+            "TRUNCATE" => "TRUNCATE",
+            _ => {
+                tracing::warn!("Unknown checkpoint mode '{}', using PASSIVE", mode);
+                "PASSIVE"
+            }
+        };
+
+        info!("Checkpointing WAL (mode: {})", checkpoint_mode);
+
+        // PRAGMA wal_checkpoint returns (busy, log, checkpointed) as results
+        // We use query_row but ignore the results
+        conn.query_row(&format!("PRAGMA wal_checkpoint({})", checkpoint_mode), [], |_row| Ok(()))
+            .context("Failed to checkpoint WAL")?;
+
+        Ok(())
+    }
+
+    /// Get detailed database statistics for monitoring and maintenance
+    ///
+    /// Collects comprehensive metrics about database size, fragmentation,
+    /// and WAL usage. Use these statistics to determine when maintenance
+    /// operations (vacuum, checkpoint) should be performed.
+    ///
+    /// # Returns
+    /// `DatabaseStats` containing:
+    /// - `page_count` - Total number of database pages
+    /// - `page_size` - Size of each page in bytes (typically 4096)
+    /// - `total_size_mb` - Total database size in megabytes
+    /// - `freelist_pages` - Number of unused pages (fragmentation)
+    /// - `wasted_space_mb` - Size of wasted space from fragmentation
+    /// - `wal_size_mb` - Current WAL file size in megabytes
+    ///
+    /// # Helper Methods
+    /// `DatabaseStats` provides helper methods:
+    /// - `fragmentation_percentage()` - Percentage of database that is wasted space
+    /// - `should_vacuum()` - Returns true if >10% fragmented or >50MB wasted
+    /// - `should_checkpoint()` - Returns true if WAL is >10MB
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// let stats = storage.get_stats()?;
+    /// println!("Database: {:.2} MB", stats.total_size_mb);
+    /// println!("Fragmentation: {:.1}%", stats.fragmentation_percentage());
+    ///
+    /// if stats.should_vacuum() {
+    ///     storage.optimize()?;
+    /// }
+    /// if stats.should_checkpoint() {
+    ///     storage.checkpoint_wal("TRUNCATE")?;
+    /// }
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    ///
+    /// # Use Cases
+    /// - Monitoring database health dashboards
+    /// - Automated maintenance scheduling
+    /// - Performance troubleshooting
+    /// - Capacity planning
+    pub fn get_stats(&self) -> Result<DatabaseStats> {
+        let conn = self.open_connection()?;
+
+        let page_count: i64 = conn
+            .query_row("PRAGMA page_count", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let page_size: i64 = conn
+            .query_row("PRAGMA page_size", [], |row| row.get(0))
+            .unwrap_or(4096);
+
+        let freelist_count: i64 = conn
+            .query_row("PRAGMA freelist_count", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let wal_size: i64 = {
+            let wal_path = format!("{}-wal", self.db_path.display());
+            std::fs::metadata(&wal_path)
+                .map(|m| m.len() as i64)
+                .unwrap_or(0)
+        };
+
+        Ok(DatabaseStats {
+            page_count,
+            page_size,
+            total_size_mb: (page_count * page_size) as f64 / 1_048_576.0,
+            freelist_pages: freelist_count,
+            wasted_space_mb: (freelist_count * page_size) as f64 / 1_048_576.0,
+            wal_size_mb: wal_size as f64 / 1_048_576.0,
+        })
     }
 
     /// Get a database connection for advanced operations
@@ -898,6 +1213,11 @@ mod tests {
         })
         .expect("storage manager");
         storage.initialize().expect("init db");
+
+        // Keep temp directory alive by leaking it
+        // This is acceptable for tests and prevents directory cleanup issues
+        std::mem::forget(tmp);
+
         storage
     }
 
@@ -976,7 +1296,7 @@ mod tests {
         let protocol = PeptideProtocol::new("Test Protocol", "BPC-157");
         storage.upsert_protocol(&protocol).expect("upsert protocol");
 
-        let dose = DoseLog::new(&protocol.id, "Left Shoulder", 0.5);
+        let dose = DoseLog::new(&protocol.id, &"Left Shoulder".to_string(), 0.5);
         storage.append_dose_log(&dose).expect("append dose");
 
         let doses = storage.list_dose_logs().expect("list doses");
@@ -993,9 +1313,9 @@ mod tests {
         storage.upsert_protocol(&protocol1).expect("upsert protocol1");
         storage.upsert_protocol(&protocol2).expect("upsert protocol2");
 
-        let dose1 = DoseLog::new(&protocol1.id, "Site A", 0.5);
-        let dose2 = DoseLog::new(&protocol2.id, "Site B", 1.0);
-        let dose3 = DoseLog::new(&protocol1.id, "Site C", 0.75);
+        let dose1 = DoseLog::new(&protocol1.id, &"Site A".to_string(), 0.5);
+        let dose2 = DoseLog::new(&protocol2.id, &"Site B".to_string(), 1.0);
+        let dose3 = DoseLog::new(&protocol1.id, &"Site C".to_string(), 0.75);
 
         storage.append_dose_log(&dose1).expect("append dose1");
         storage.append_dose_log(&dose2).expect("append dose2");
@@ -1014,7 +1334,7 @@ mod tests {
         let protocol = PeptideProtocol::new("Test Protocol", "BPC-157");
         storage.upsert_protocol(&protocol).expect("upsert protocol");
 
-        let dose = DoseLog::new(&protocol.id, "Site", 0.5);
+        let dose = DoseLog::new(&protocol.id, &"Site".to_string(), 0.5);
         let dose_id = dose.id.clone();
         storage.append_dose_log(&dose).expect("append dose");
 
@@ -1226,7 +1546,7 @@ mod tests {
         let supplier = Supplier::new("TestSupplier");
         storage.upsert_supplier(&supplier).expect("upsert supplier");
 
-        let price = PriceHistory::new(&supplier.id, "BPC-157", 2.5);
+        let price = PriceHistory::new(&supplier.id, &"BPC-157".to_string(), 2.5);
         storage.add_price_history(&price).expect("add price");
 
         let prices = storage
@@ -1242,9 +1562,9 @@ mod tests {
         let supplier = Supplier::new("TestSupplier");
         storage.upsert_supplier(&supplier).expect("upsert supplier");
 
-        let price1 = PriceHistory::new(&supplier.id, "BPC-157", 2.5);
-        let price2 = PriceHistory::new(&supplier.id, "TB-500", 3.0);
-        let price3 = PriceHistory::new(&supplier.id, "BPC-157", 2.6);
+        let price1 = PriceHistory::new(&supplier.id, &"BPC-157".to_string(), 2.5);
+        let price2 = PriceHistory::new(&supplier.id, &"TB-500".to_string(), 3.0);
+        let price3 = PriceHistory::new(&supplier.id, &"BPC-157".to_string(), 2.6);
 
         storage.add_price_history(&price1).expect("add");
         storage.add_price_history(&price2).expect("add");
@@ -1263,9 +1583,9 @@ mod tests {
         let supplier = Supplier::new("TestSupplier");
         storage.upsert_supplier(&supplier).expect("upsert supplier");
 
-        let price1 = PriceHistory::new(&supplier.id, "BPC-157", 2.5);
+        let price1 = PriceHistory::new(&supplier.id, &"BPC-157".to_string(), 2.5);
         std::thread::sleep(std::time::Duration::from_millis(10));
-        let price2 = PriceHistory::new(&supplier.id, "BPC-157", 2.6);
+        let price2 = PriceHistory::new(&supplier.id, &"BPC-157".to_string(), 2.6);
 
         storage.add_price_history(&price1).expect("add");
         storage.add_price_history(&price2).expect("add");
@@ -1436,11 +1756,11 @@ mod tests {
         let storage = create_test_storage();
         for i in 1..=5 {
             let summary = SummaryHistory::new(
-                &format!("Summary {}", i),
-                "content",
-                "output",
-                "markdown",
-                "claude",
+                format!("Summary {}", i),
+                "content".to_string(),
+                "output".to_string(),
+                "markdown".to_string(),
+                "claude".to_string(),
             );
             storage.save_summary(&summary).expect("save");
         }
@@ -1454,11 +1774,11 @@ mod tests {
         let storage = create_test_storage();
         for i in 1..=10 {
             let summary = SummaryHistory::new(
-                &format!("Summary {}", i),
-                "content",
-                "output",
-                "markdown",
-                "claude",
+                format!("Summary {}", i),
+                "content".to_string(),
+                "output".to_string(),
+                "markdown".to_string(),
+                "claude".to_string(),
             );
             storage.save_summary(&summary).expect("save");
         }
@@ -1517,5 +1837,181 @@ mod tests {
         let storage = create_test_storage();
         // Initialize again - should not error
         storage.initialize().expect("initialize again");
+    }
+
+    // =============================================================================
+    // Health & Diagnostics Tests
+    // =============================================================================
+
+    #[test]
+    fn health_check_returns_healthy_report() {
+        let storage = create_test_storage();
+        let report = storage.health_check().expect("health check");
+
+        // Fresh database should be healthy
+        assert!(report.is_healthy);
+        assert_eq!(report.integrity_result, "ok");
+        assert!(report.wal_mode);
+        assert!(report.foreign_keys_enabled);
+        assert!(report.size_mb > 0.0);
+        assert!(report.page_count > 0);
+        assert!(report.page_size > 0);
+    }
+
+    #[test]
+    fn verify_integrity_succeeds_on_healthy_database() {
+        let storage = create_test_storage();
+        storage.verify_integrity().expect("integrity check should pass");
+    }
+
+    #[test]
+    fn get_stats_returns_valid_statistics() {
+        let storage = create_test_storage();
+        let stats = storage.get_stats().expect("get stats");
+
+        assert!(stats.page_count > 0);
+        assert!(stats.page_size > 0);
+        assert!(stats.total_size_mb > 0.0);
+        assert!(stats.freelist_pages >= 0);
+        assert!(stats.wasted_space_mb >= 0.0);
+        assert!(stats.wal_size_mb >= 0.0);
+    }
+
+    #[test]
+    fn optimize_database_runs_successfully() {
+        let storage = create_test_storage();
+
+        // Add some data first
+        let protocol = PeptideProtocol::new("Test Protocol", "BPC-157");
+        storage.upsert_protocol(&protocol).expect("upsert");
+
+        // Run optimization
+        storage.optimize().expect("optimize should succeed");
+    }
+
+    #[test]
+    fn checkpoint_wal_passive_mode() {
+        let storage = create_test_storage();
+
+        // Add some data to create WAL entries
+        let protocol = PeptideProtocol::new("Test Protocol", "BPC-157");
+        storage.upsert_protocol(&protocol).expect("upsert");
+
+        // Checkpoint with PASSIVE mode
+        storage.checkpoint_wal("PASSIVE").expect("checkpoint should succeed");
+    }
+
+    #[test]
+    fn checkpoint_wal_full_mode() {
+        let storage = create_test_storage();
+
+        // Add some data to create WAL entries
+        let protocol = PeptideProtocol::new("Test Protocol", "BPC-157");
+        storage.upsert_protocol(&protocol).expect("upsert");
+
+        // Checkpoint with FULL mode
+        storage.checkpoint_wal("FULL").expect("checkpoint should succeed");
+    }
+
+    #[test]
+    fn checkpoint_wal_invalid_mode_defaults_to_passive() {
+        let storage = create_test_storage();
+
+        // Invalid mode should default to PASSIVE and not error
+        storage.checkpoint_wal("INVALID").expect("checkpoint should succeed with default");
+    }
+
+    #[test]
+    fn database_stats_fragmentation_calculation() {
+        let storage = create_test_storage();
+        let stats = storage.get_stats().expect("get stats");
+
+        // Fragmentation should be between 0 and 100
+        let fragmentation = stats.fragmentation_percentage();
+        assert!(fragmentation >= 0.0 && fragmentation <= 100.0);
+    }
+
+    #[test]
+    fn database_stats_recommendations() {
+        let storage = create_test_storage();
+        let stats = storage.get_stats().expect("get stats");
+
+        // Fresh database should not need vacuum or checkpoint
+        assert!(!stats.should_vacuum(), "Fresh database shouldn't need vacuum");
+        assert!(!stats.should_checkpoint(), "Fresh database shouldn't need checkpoint");
+    }
+
+    #[test]
+    fn health_check_with_data_operations() {
+        let storage = create_test_storage();
+
+        // Add various types of data
+        let protocol = PeptideProtocol::new("Test Protocol", "BPC-157");
+        storage.upsert_protocol(&protocol).expect("upsert protocol");
+
+        let dose_log = DoseLog::new(&protocol.id, &"Left Abdomen".to_string(), 5.0);
+        storage.append_dose_log(&dose_log).expect("append dose");
+
+        // Health check should still pass
+        let report = storage.health_check().expect("health check");
+        assert!(report.is_healthy);
+        assert_eq!(report.integrity_result, "ok");
+    }
+
+    #[test]
+    fn optimize_after_bulk_operations() {
+        let storage = create_test_storage();
+
+        // Perform bulk operations
+        for i in 0..100 {
+            let protocol = PeptideProtocol::new(
+                &format!("Protocol {}", i),
+                &format!("Peptide {}", i),
+            );
+            storage.upsert_protocol(&protocol).expect("upsert");
+        }
+
+        // Get stats before optimization
+        let _stats_before = storage.get_stats().expect("stats before");
+
+        // Optimize
+        storage.optimize().expect("optimize");
+
+        // Get stats after optimization
+        let stats_after = storage.get_stats().expect("stats after");
+
+        // Stats should be available (exact values may vary)
+        assert!(stats_after.page_count > 0);
+    }
+
+    #[test]
+    fn cache_size_is_at_least_64mb() {
+        let storage = create_test_storage();
+        let conn = storage.connection().expect("get connection");
+
+        // Query cache_size pragma
+        let cache_size: i64 = conn
+            .query_row("PRAGMA cache_size", [], |row| row.get(0))
+            .expect("query cache_size");
+
+        // Negative values are in KB, positive are in pages
+        // We configured -64000 (64MB)
+        if cache_size < 0 {
+            // Negative = KB
+            let cache_kb = cache_size.abs();
+            assert!(
+                cache_kb >= 64000,
+                "Cache size should be at least 64MB (64000 KB), got {} KB",
+                cache_kb
+            );
+        } else {
+            // Positive = pages (typically 4KB each)
+            // 64MB / 4KB = 16000 pages minimum
+            assert!(
+                cache_size >= 16000,
+                "Cache size should be at least 64MB (16000 pages), got {} pages",
+                cache_size
+            );
+        }
     }
 }

@@ -322,6 +322,94 @@ impl Default for HealthReport {
     }
 }
 
+/// Database Statistics
+/// Contains detailed metrics about database size, fragmentation, and WAL usage
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatabaseStats {
+    pub page_count: i64,
+    pub page_size: i64,
+    pub total_size_mb: f64,
+    pub freelist_pages: i64,
+    pub wasted_space_mb: f64,
+    pub wal_size_mb: f64,
+}
+
+impl DatabaseStats {
+    /// Calculate the percentage of database space that is wasted due to fragmentation
+    ///
+    /// Returns a value between 0.0 and 100.0 representing the percentage of
+    /// database pages that are in the freelist (unused).
+    ///
+    /// # Example
+    /// ```
+    /// # use peptrack_core::models::DatabaseStats;
+    /// let stats = DatabaseStats {
+    ///     page_count: 1000,
+    ///     page_size: 4096,
+    ///     total_size_mb: 4.0,
+    ///     freelist_pages: 150,
+    ///     wasted_space_mb: 0.6,
+    ///     wal_size_mb: 2.0,
+    /// };
+    /// assert_eq!(stats.fragmentation_percentage(), 15.0);
+    /// ```
+    pub fn fragmentation_percentage(&self) -> f64 {
+        if self.page_count == 0 {
+            0.0
+        } else {
+            (self.freelist_pages as f64 / self.page_count as f64) * 100.0
+        }
+    }
+
+    /// Determine if database should be vacuumed to reclaim space
+    ///
+    /// Returns `true` if:
+    /// - Fragmentation is >10% of total database, OR
+    /// - Wasted space exceeds 50MB
+    ///
+    /// # Example
+    /// ```
+    /// # use peptrack_core::models::DatabaseStats;
+    /// let stats = DatabaseStats {
+    ///     page_count: 1000,
+    ///     page_size: 4096,
+    ///     total_size_mb: 4.0,
+    ///     freelist_pages: 150,  // 15% fragmentation
+    ///     wasted_space_mb: 0.6,
+    ///     wal_size_mb: 2.0,
+    /// };
+    /// assert!(stats.should_vacuum()); // >10% fragmented
+    /// ```
+    pub fn should_vacuum(&self) -> bool {
+        // Recommend vacuum if >10% fragmentation or >50MB wasted
+        self.fragmentation_percentage() > 10.0 || self.wasted_space_mb > 50.0
+    }
+
+    /// Determine if WAL file should be checkpointed
+    ///
+    /// Returns `true` if WAL file exceeds 10MB. Large WAL files should be
+    /// checkpointed (merged into main database) to prevent excessive growth
+    /// and ensure backup consistency.
+    ///
+    /// # Example
+    /// ```
+    /// # use peptrack_core::models::DatabaseStats;
+    /// let stats = DatabaseStats {
+    ///     page_count: 1000,
+    ///     page_size: 4096,
+    ///     total_size_mb: 4.0,
+    ///     freelist_pages: 50,
+    ///     wasted_space_mb: 0.2,
+    ///     wal_size_mb: 15.0,  // Large WAL
+    /// };
+    /// assert!(stats.should_checkpoint()); // WAL >10MB
+    /// ```
+    pub fn should_checkpoint(&self) -> bool {
+        // Recommend checkpoint if WAL > 10MB
+        self.wal_size_mb > 10.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

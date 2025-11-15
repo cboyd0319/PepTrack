@@ -18,7 +18,7 @@ use commands::{
         check_drive_status, complete_drive_oauth, disconnect_drive, start_drive_oauth,
         upload_to_drive, OAuthState,
     },
-    health::{get_database_health, verify_database_integrity},
+    health::{checkpoint_database, get_database_health, get_database_stats, optimize_database, verify_database_integrity},
     literature::{list_literature, open_external_url, search_cached_literature, search_literature},
     protocols::{list_protocols, save_protocol, toggle_protocol_favorite},
     restore::{preview_backup, restore_from_backup},
@@ -181,6 +181,9 @@ pub fn run() {
             // Health & diagnostics commands
             get_database_health,
             verify_database_integrity,
+            optimize_database,
+            checkpoint_database,
+            get_database_stats,
             // Default peptides
             get_default_peptides,
             populate_default_peptides
