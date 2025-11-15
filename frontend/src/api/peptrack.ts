@@ -9,6 +9,7 @@ export interface PeptideProtocol {
   created_at: string;
   updated_at: string;
   is_favorite?: boolean;
+  tags?: string[];
 }
 
 export interface CreateProtocolPayload {
@@ -43,6 +44,27 @@ export async function saveProtocol(payload: CreateProtocolPayload) {
 export async function toggleProtocolFavorite(protocolId: string) {
   return invoke<boolean>("toggle_protocol_favorite", {
     protocolId,
+  });
+}
+
+export async function updateProtocolTags(protocolId: string, tags: string[]) {
+  return invoke<string[]>("update_protocol_tags", {
+    protocolId,
+    tags,
+  });
+}
+
+export async function addProtocolTag(protocolId: string, tag: string) {
+  return invoke<string[]>("add_protocol_tag", {
+    protocolId,
+    tag,
+  });
+}
+
+export async function removeProtocolTag(protocolId: string, tag: string) {
+  return invoke<string[]>("remove_protocol_tag", {
+    protocolId,
+    tag,
   });
 }
 
