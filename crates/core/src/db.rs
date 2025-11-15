@@ -9,7 +9,7 @@ use tracing::info;
 
 use crate::encryption::{EnvelopeEncryption, KeyProvider};
 use crate::models::{
-    Alert, DatabaseStats, DoseLog, HealthReport, InventoryItem, LiteratureEntry, PeptideProtocol,
+    Alert, BodyMetric, DatabaseStats, DoseLog, HealthReport, InventoryItem, LiteratureEntry, PeptideProtocol,
     PriceHistory, Supplier, SummaryHistory,
 };
 
@@ -215,6 +215,17 @@ impl StorageManager {
 
             CREATE INDEX IF NOT EXISTS idx_summary_history_created
                 ON summary_history(created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS body_metrics (
+                id TEXT PRIMARY KEY,
+                date TEXT NOT NULL,
+                payload BLOB NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_body_metrics_date
+                ON body_metrics(date DESC);
             "#,
         )
         .context("Failed to initialize database schema")?;
@@ -1005,6 +1016,165 @@ impl StorageManager {
         conn.execute("DELETE FROM dose_logs WHERE id = ?1", params![log_id])
             .context("Failed to delete dose log")?;
         Ok(())
+    }
+
+    /// Save or update a body metric entry
+    ///
+    /// Stores body composition metrics like weight, body fat %, muscle mass, etc.
+    /// Encrypts all data before storage.
+    ///
+    /// # Arguments
+    /// * `metric` - The body metric entry to save
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # use peptrack_core::models::BodyMetric;
+    /// # use time::OffsetDateTime;
+    /// # let storage = todo!();
+    /// let mut metric = BodyMetric::new(OffsetDateTime::now_utc());
+    /// metric.weight_kg = Some(75.5);
+    /// metric.body_fat_percentage = Some(15.2);
+    /// storage.upsert_body_metric(&metric)?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn upsert_body_metric(&self, metric: &BodyMetric) -> Result<()> {
+        let conn = self.open_connection()?;
+        let payload = serde_json::to_vec(metric).context("Failed to serialize body metric")?;
+        let encrypted = self.encryption.seal(&payload)?;
+
+        conn.execute(
+            r#"
+            INSERT INTO body_metrics (id, date, payload, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5)
+            ON CONFLICT(id) DO UPDATE SET
+                date = excluded.date,
+                payload = excluded.payload,
+                updated_at = excluded.updated_at;
+            "#,
+            params![
+                metric.id,
+                metric.date.to_string(),
+                encrypted,
+                metric.created_at.to_string(),
+                metric.updated_at.to_string()
+            ],
+        )
+        .context("Failed to upsert body metric")?;
+
+        Ok(())
+    }
+
+    /// List all body metrics ordered by date (most recent first)
+    ///
+    /// Returns all body metric entries from the database, decrypted
+    /// and sorted by measurement date.
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// let metrics = storage.list_body_metrics()?;
+    /// for metric in metrics {
+    ///     println!("Date: {}, Weight: {:?} kg", metric.date, metric.weight_kg);
+    /// }
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn list_body_metrics(&self) -> Result<Vec<BodyMetric>> {
+        let conn = self.open_connection()?;
+        let mut stmt = conn.prepare("SELECT payload FROM body_metrics ORDER BY date DESC")?;
+        let mut rows = stmt
+            .query([])
+            .context("Unable to run body metrics list query")?;
+
+        let mut metrics = Vec::new();
+        while let Some(row) = rows.next()? {
+            let blob: Vec<u8> = row.get(0)?;
+            let decrypted = self.encryption.open(&blob)?;
+            let metric: BodyMetric = serde_json::from_slice(&decrypted)
+                .context("Failed to deserialize body metric")?;
+            metrics.push(metric);
+        }
+
+        Ok(metrics)
+    }
+
+    /// Get a specific body metric by ID
+    ///
+    /// Returns the body metric if found, None otherwise.
+    ///
+    /// # Arguments
+    /// * `metric_id` - The ID of the body metric to retrieve
+    pub fn get_body_metric(&self, metric_id: &str) -> Result<Option<BodyMetric>> {
+        let conn = self.open_connection()?;
+        let mut stmt = conn.prepare("SELECT payload FROM body_metrics WHERE id = ?1")?;
+
+        let result = stmt.query_row(params![metric_id], |row| {
+            let blob: Vec<u8> = row.get(0)?;
+            Ok(blob)
+        });
+
+        match result {
+            Ok(blob) => {
+                let decrypted = self.encryption.open(&blob)?;
+                let metric: BodyMetric = serde_json::from_slice(&decrypted)
+                    .context("Failed to deserialize body metric")?;
+                Ok(Some(metric))
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Delete a body metric entry
+    ///
+    /// Permanently removes a body metric from the database.
+    ///
+    /// # Arguments
+    /// * `metric_id` - The ID of the body metric to delete
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// storage.delete_body_metric("metric-id")?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn delete_body_metric(&self, metric_id: &str) -> Result<()> {
+        let conn = self.open_connection()?;
+        conn.execute("DELETE FROM body_metrics WHERE id = ?1", params![metric_id])
+            .context("Failed to delete body metric")?;
+        Ok(())
+    }
+
+    /// Bulk delete multiple body metrics
+    ///
+    /// Deletes multiple body metric entries in a single transaction.
+    ///
+    /// # Arguments
+    /// * `metric_ids` - Slice of body metric IDs to delete
+    ///
+    /// # Returns
+    /// The number of metrics actually deleted
+    pub fn bulk_delete_body_metrics(&self, metric_ids: &[String]) -> Result<usize> {
+        if metric_ids.is_empty() {
+            return Ok(0);
+        }
+
+        let conn = self.open_connection()?;
+        let mut total_deleted = 0;
+
+        let tx = conn.unchecked_transaction()?;
+        {
+            let mut stmt = tx.prepare("DELETE FROM body_metrics WHERE id = ?1")?;
+            for metric_id in metric_ids {
+                let rows = stmt.execute(params![metric_id])?;
+                total_deleted += rows;
+            }
+        }
+        tx.commit()?;
+
+        Ok(total_deleted)
     }
 
     pub fn cache_literature(&self, entry: &LiteratureEntry) -> Result<()> {

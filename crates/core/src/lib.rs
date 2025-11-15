@@ -51,4 +51,4 @@ pub use backup_encryption::{decrypt_backup, encrypt_backup, is_encrypted_backup}
 pub use db::{StorageConfig, StorageManager};
 pub use encryption::{EnvelopeEncryption, KeyMaterial, KeyProvider, StaticKeyProvider};
 pub use keychain::{migrate_file_key_to_keychain, KeychainKeyProvider};
-pub use models::{DoseLog, InventoryItem, LiteratureEntry, PeptideProtocol, Supplier, VialStatus};
+pub use models::{BodyMetric, DoseLog, InventoryItem, LiteratureEntry, PeptideProtocol, Supplier, VialStatus};

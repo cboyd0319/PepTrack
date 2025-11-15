@@ -1,6 +1,7 @@
 pub mod ai;
 pub mod analytics;
 pub mod backup;
+pub mod body_metrics;
 pub mod defaults;
 pub mod doses;
 pub mod drive;

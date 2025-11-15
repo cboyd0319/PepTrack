@@ -290,6 +290,38 @@ impl SummaryHistory {
     }
 }
 
+/// Body Metric Entry
+/// Tracks body composition and health metrics over time
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BodyMetric {
+    pub id: String,
+    pub date: OffsetDateTime,
+    pub weight_kg: Option<f32>,
+    pub body_fat_percentage: Option<f32>,
+    pub muscle_mass_kg: Option<f32>,
+    pub waist_cm: Option<f32>,
+    pub notes: Option<String>,
+    pub created_at: OffsetDateTime,
+    pub updated_at: OffsetDateTime,
+}
+
+impl BodyMetric {
+    pub fn new(date: OffsetDateTime) -> Self {
+        let now = now_timestamp();
+        Self {
+            id: Uuid::new_v4().to_string(),
+            date,
+            weight_kg: None,
+            body_fat_percentage: None,
+            muscle_mass_kg: None,
+            waist_cm: None,
+            notes: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+}
+
 /// Database Health Report
 /// Contains information about database integrity and statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]

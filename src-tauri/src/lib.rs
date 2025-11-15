@@ -12,6 +12,7 @@ use commands::{
         mark_alert_read, save_summary,
     },
     backup::{export_backup_data, get_backup_file_path},
+    body_metrics::{bulk_delete_body_metrics, delete_body_metric, get_body_metric, list_body_metrics, log_body_metric, update_body_metric},
     defaults::{get_default_peptides, populate_default_peptides},
     doses::{bulk_delete_doses, delete_dose_log, list_dose_logs, list_dose_logs_for_protocol, log_dose},
     drive::{
@@ -139,6 +140,13 @@ pub fn run() {
             list_dose_logs_for_protocol,
             delete_dose_log,
             bulk_delete_doses,
+            // Body metrics commands
+            log_body_metric,
+            list_body_metrics,
+            get_body_metric,
+            update_body_metric,
+            delete_body_metric,
+            bulk_delete_body_metrics,
             export_backup_data,
             get_backup_file_path,
             start_drive_oauth,
