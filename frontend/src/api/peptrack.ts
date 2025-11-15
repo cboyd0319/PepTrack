@@ -68,6 +68,42 @@ export async function removeProtocolTag(protocolId: string, tag: string) {
   });
 }
 
+// Bulk Operations for Protocols
+
+export async function deleteProtocol(protocolId: string) {
+  return invoke<void>("delete_protocol", {
+    protocolId,
+  });
+}
+
+export async function bulkDeleteProtocols(protocolIds: string[]) {
+  return invoke<number>("bulk_delete_protocols", {
+    protocolIds,
+  });
+}
+
+export async function bulkAddTagToProtocols(protocolIds: string[], tag: string) {
+  return invoke<number>("bulk_add_tag_to_protocols", {
+    protocolIds,
+    tag,
+  });
+}
+
+export async function bulkToggleFavoriteProtocols(protocolIds: string[], isFavorite: boolean) {
+  return invoke<number>("bulk_toggle_favorite_protocols", {
+    protocolIds,
+    isFavorite,
+  });
+}
+
+// Bulk Operations for Doses
+
+export async function bulkDeleteDoses(doseIds: string[]) {
+  return invoke<number>("bulk_delete_doses", {
+    doseIds,
+  });
+}
+
 // Database Health types and functions
 
 export interface HealthReport {

@@ -406,6 +406,209 @@ impl StorageManager {
         Ok(protocol.tags)
     }
 
+    /// Delete a single protocol
+    ///
+    /// Permanently removes a protocol from the database. This operation
+    /// cannot be undone.
+    ///
+    /// # Arguments
+    /// * `protocol_id` - The ID of the protocol to delete
+    ///
+    /// # Returns
+    /// `Ok(())` if successful, `Err` if protocol not found or deletion fails
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// storage.delete_protocol("protocol-id")?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn delete_protocol(&self, protocol_id: &str) -> Result<()> {
+        let conn = self.open_connection()?;
+        let rows_affected = conn
+            .execute("DELETE FROM protocols WHERE id = ?1", params![protocol_id])
+            .context("Failed to delete protocol")?;
+
+        if rows_affected == 0 {
+            return Err(anyhow::anyhow!("Protocol not found: {}", protocol_id));
+        }
+
+        Ok(())
+    }
+
+    /// Bulk delete multiple protocols
+    ///
+    /// Deletes multiple protocols in a single transaction for efficiency.
+    /// This operation cannot be undone.
+    ///
+    /// # Arguments
+    /// * `protocol_ids` - Slice of protocol IDs to delete
+    ///
+    /// # Returns
+    /// The number of protocols actually deleted
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// let ids = vec!["id1".to_string(), "id2".to_string()];
+    /// let count = storage.bulk_delete_protocols(&ids)?;
+    /// println!("Deleted {} protocols", count);
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn bulk_delete_protocols(&self, protocol_ids: &[String]) -> Result<usize> {
+        if protocol_ids.is_empty() {
+            return Ok(0);
+        }
+
+        let conn = self.open_connection()?;
+        let mut total_deleted = 0;
+
+        // Use a transaction for atomic bulk delete
+        let tx = conn.unchecked_transaction()?;
+        {
+            let mut stmt = tx.prepare("DELETE FROM protocols WHERE id = ?1")?;
+            for protocol_id in protocol_ids {
+                let rows = stmt.execute(params![protocol_id])?;
+                total_deleted += rows;
+            }
+        }
+        tx.commit()?;
+
+        Ok(total_deleted)
+    }
+
+    /// Bulk delete multiple dose logs
+    ///
+    /// Deletes multiple dose log entries in a single transaction for efficiency.
+    /// This operation cannot be undone.
+    ///
+    /// # Arguments
+    /// * `dose_ids` - Slice of dose log IDs to delete
+    ///
+    /// # Returns
+    /// The number of dose logs actually deleted
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// let ids = vec!["id1".to_string(), "id2".to_string()];
+    /// let count = storage.bulk_delete_doses(&ids)?;
+    /// println!("Deleted {} doses", count);
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn bulk_delete_doses(&self, dose_ids: &[String]) -> Result<usize> {
+        if dose_ids.is_empty() {
+            return Ok(0);
+        }
+
+        let conn = self.open_connection()?;
+        let mut total_deleted = 0;
+
+        // Use a transaction for atomic bulk delete
+        let tx = conn.unchecked_transaction()?;
+        {
+            let mut stmt = tx.prepare("DELETE FROM dose_logs WHERE id = ?1")?;
+            for dose_id in dose_ids {
+                let rows = stmt.execute(params![dose_id])?;
+                total_deleted += rows;
+            }
+        }
+        tx.commit()?;
+
+        Ok(total_deleted)
+    }
+
+    /// Bulk add a tag to multiple protocols
+    ///
+    /// Adds the specified tag to multiple protocols if it doesn't already exist.
+    /// Tags are case-sensitive. Updates timestamps for modified protocols.
+    ///
+    /// # Arguments
+    /// * `protocol_ids` - Slice of protocol IDs to tag
+    /// * `tag` - The tag to add
+    ///
+    /// # Returns
+    /// The number of protocols that were actually modified (tag added)
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// let ids = vec!["id1".to_string(), "id2".to_string()];
+    /// let count = storage.bulk_add_tag_to_protocols(&ids, "morning".to_string())?;
+    /// println!("Added tag to {} protocols", count);
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn bulk_add_tag_to_protocols(&self, protocol_ids: &[String], tag: String) -> Result<usize> {
+        if protocol_ids.is_empty() {
+            return Ok(0);
+        }
+
+        let mut modified_count = 0;
+
+        for protocol_id in protocol_ids {
+            if let Ok(Some(mut protocol)) = self.get_protocol(protocol_id) {
+                // Only update if tag doesn't already exist
+                if !protocol.tags.contains(&tag) {
+                    protocol.tags.push(tag.clone());
+                    protocol.updated_at = now_timestamp();
+                    if self.upsert_protocol(&protocol).is_ok() {
+                        modified_count += 1;
+                    }
+                }
+            }
+        }
+
+        Ok(modified_count)
+    }
+
+    /// Bulk toggle favorite status for multiple protocols
+    ///
+    /// Sets the favorite status for multiple protocols to the specified value.
+    /// Updates timestamps for modified protocols.
+    ///
+    /// # Arguments
+    /// * `protocol_ids` - Slice of protocol IDs to update
+    /// * `is_favorite` - The favorite status to set (true = favorite, false = unfavorite)
+    ///
+    /// # Returns
+    /// The number of protocols that were actually modified
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// let ids = vec!["id1".to_string(), "id2".to_string()];
+    /// let count = storage.bulk_toggle_favorite_protocols(&ids, true)?;
+    /// println!("Favorited {} protocols", count);
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn bulk_toggle_favorite_protocols(&self, protocol_ids: &[String], is_favorite: bool) -> Result<usize> {
+        if protocol_ids.is_empty() {
+            return Ok(0);
+        }
+
+        let mut modified_count = 0;
+
+        for protocol_id in protocol_ids {
+            if let Ok(Some(mut protocol)) = self.get_protocol(protocol_id) {
+                // Only update if status is different
+                if protocol.is_favorite != is_favorite {
+                    protocol.is_favorite = is_favorite;
+                    protocol.updated_at = now_timestamp();
+                    if self.upsert_protocol(&protocol).is_ok() {
+                        modified_count += 1;
+                    }
+                }
+            }
+        }
+
+        Ok(modified_count)
+    }
+
     /// Perform comprehensive database health check
     ///
     /// Runs PRAGMA quick_check to verify database integrity and collects

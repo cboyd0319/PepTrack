@@ -6,7 +6,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { PeptideProtocol, CreateProtocolPayload } from '../api/peptrack'
-import { listProtocols, saveProtocol } from '../api/peptrack'
+import { listProtocols, saveProtocol, deleteProtocol } from '../api/peptrack'
 import { showErrorToast, showSuccessToast } from '../utils/errorHandling'
 
 export const useProtocolStore = defineStore('protocols', () => {
@@ -116,10 +116,26 @@ export const useProtocolStore = defineStore('protocols', () => {
     }
   }
 
-  async function removeProtocol(_id: string) {
-    // Note: No delete API available yet
-    console.warn('Protocol deletion not yet implemented in backend')
-    showErrorToast(new Error('Protocol deletion not yet available'), { operation: 'delete protocol' })
+  async function removeProtocol(id: string) {
+    loading.value = true
+    const originalProtocols = [...protocols.value]
+
+    try {
+      // Optimistically remove from local state
+      protocols.value = protocols.value.filter(p => p.id !== id)
+
+      // Call API to delete from backend
+      await deleteProtocol(id)
+
+      showSuccessToast('Protocol Deleted', 'Protocol removed successfully')
+    } catch (error) {
+      // Rollback on error
+      protocols.value = originalProtocols
+      showErrorToast(error, { operation: 'delete protocol' })
+      throw error
+    } finally {
+      loading.value = false
+    }
   }
 
   function getProtocolById(id: string) {
