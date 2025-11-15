@@ -104,6 +104,53 @@ export async function bulkDeleteDoses(doseIds: string[]) {
   });
 }
 
+// Body Metrics types and functions
+
+export interface BodyMetric {
+  id: string;
+  date: string; // ISO 8601 string
+  weight_kg?: number | null;
+  body_fat_percentage?: number | null;
+  muscle_mass_kg?: number | null;
+  waist_cm?: number | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BodyMetricPayload {
+  date: string; // ISO 8601 string
+  weight_kg?: number | null;
+  body_fat_percentage?: number | null;
+  muscle_mass_kg?: number | null;
+  waist_cm?: number | null;
+  notes?: string | null;
+}
+
+export async function logBodyMetric(payload: BodyMetricPayload) {
+  return invoke<BodyMetric>("log_body_metric", { payload });
+}
+
+export async function listBodyMetrics() {
+  return invoke<BodyMetric[]>("list_body_metrics");
+}
+
+export async function getBodyMetric(metricId: string) {
+  return invoke<BodyMetric | null>("get_body_metric", { metricId });
+}
+
+export async function updateBodyMetric(metricId: string, payload: BodyMetricPayload) {
+  return invoke<BodyMetric>("update_body_metric", { metricId, payload });
+}
+
+export async function deleteBodyMetric(metricId: string) {
+  return invoke<void>("delete_body_metric", { metricId });
+}
+
+export async function bulkDeleteBodyMetrics(metricIds: string[]) {
+  return invoke<number>("bulk_delete_body_metrics", { metricIds });
+}
+
 // Database Health types and functions
 
 export interface HealthReport {
