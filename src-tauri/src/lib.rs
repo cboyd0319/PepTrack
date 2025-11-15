@@ -7,9 +7,9 @@ use tracing::info;
 use commands::{
     ai::{check_ai_availability, summarize_text},
     analytics::{
-        add_price_history, clear_all_alerts, compare_prices, create_alert, delete_summary,
+        add_price_history, check_inventory_and_create_alerts, clear_all_alerts, compare_prices, create_alert, delete_summary,
         dismiss_alert, get_latest_price, list_alerts, list_price_history, list_summary_history,
-        mark_alert_read, save_summary,
+        mark_alert_read, predict_inventory_depletion, save_summary,
     },
     backup::{export_backup_data, get_backup_file_path},
     body_metrics::{bulk_delete_body_metrics, delete_body_metric, get_body_metric, list_body_metrics, log_body_metric, update_body_metric},
@@ -198,6 +198,8 @@ pub fn run() {
             save_summary,
             list_summary_history,
             delete_summary,
+            predict_inventory_depletion,
+            check_inventory_and_create_alerts,
             // Dose schedule commands
             create_dose_schedule,
             list_dose_schedules,

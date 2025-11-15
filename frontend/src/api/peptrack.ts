@@ -210,6 +210,34 @@ export async function bulkDeleteSideEffects(effectIds: string[]) {
   return invoke<number>("bulk_delete_side_effects", { effectIds });
 }
 
+// Predictive Inventory types and functions
+
+export interface InventoryPrediction {
+  inventory_id: string;
+  protocol_id: string;
+  protocol_name: string;
+  peptide_name: string;
+  current_quantity_mg: number;
+  average_daily_usage_mg: number;
+  estimated_days_remaining: number;
+  will_run_out_soon: boolean;
+  threshold_days: number;
+}
+
+export async function predictInventoryDepletion(thresholdDays?: number, analysisDays?: number) {
+  return invoke<InventoryPrediction[]>("predict_inventory_depletion", {
+    thresholdDays,
+    analysisDays,
+  });
+}
+
+export async function checkInventoryAndCreateAlerts(thresholdDays?: number, analysisDays?: number) {
+  return invoke<Alert[]>("check_inventory_and_create_alerts", {
+    thresholdDays,
+    analysisDays,
+  });
+}
+
 // Database Health types and functions
 
 export interface HealthReport {

@@ -218,6 +218,20 @@ pub async fn delete_summary(
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct InventoryPrediction {
+    pub inventory_id: String,
+    pub protocol_id: String,
+    pub protocol_name: String,
+    pub peptide_name: String,
+    pub current_quantity_mg: f32,
+    pub average_daily_usage_mg: f32,
+    pub estimated_days_remaining: f32,
+    pub will_run_out_soon: bool,
+    pub threshold_days: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PriceComparison {
     pub peptide_name: String,
     pub suppliers: Vec<SupplierPrice>,
@@ -282,4 +296,193 @@ pub async fn compare_prices(
         highest_price,
         average_price,
     })
+}
+
+/// Predict inventory depletion based on dose history
+///
+/// Analyzes dose logs over the past `analysis_days` to calculate average daily usage.
+/// Returns predictions for all inventory items, flagging those that will run out
+/// within `threshold_days`.
+#[tauri::command]
+pub async fn predict_inventory_depletion(
+    state: State<'_, std::sync::Arc<AppState>>,
+    threshold_days: Option<i32>,
+    analysis_days: Option<i32>,
+) -> Result<Vec<InventoryPrediction>, String> {
+    let threshold = threshold_days.unwrap_or(14); // Default: warn 14 days before depletion
+    let lookback = analysis_days.unwrap_or(30); // Default: analyze last 30 days
+
+    info!("Predicting inventory depletion (threshold: {} days, lookback: {} days)", threshold, lookback);
+
+    // Get all inventory items
+    let inventory = state.storage.list_inventory().map_err(|e| {
+        error!("Failed to list inventory: {:#}", e);
+        format!("Failed to list inventory: {}", e)
+    })?;
+
+    // Get all protocols for name lookup
+    let protocols = state.storage.list_protocols().map_err(|e| {
+        error!("Failed to list protocols: {:#}", e);
+        format!("Failed to list protocols: {}", e)
+    })?;
+
+    let mut predictions = Vec::new();
+
+    for item in inventory {
+        // Skip if no remaining quantity
+        let current_qty = match item.quantity_remaining_mg {
+            Some(qty) if qty > 0.0 => qty,
+            _ => continue,
+        };
+
+        // Get protocol details
+        let protocol = protocols.iter().find(|p| p.id == item.protocol_id);
+        if protocol.is_none() {
+            continue;
+        }
+        let protocol = protocol.unwrap();
+
+        // Get dose logs for this protocol
+        let dose_logs = state
+            .storage
+            .list_dose_logs_for_protocol(&item.protocol_id)
+            .map_err(|e| {
+                error!("Failed to get dose logs for protocol {}: {:#}", item.protocol_id, e);
+                format!("Failed to get dose logs: {}", e)
+            })?;
+
+        // Calculate average daily usage from recent doses
+        let now = time::OffsetDateTime::now_utc();
+        let cutoff_date = now - time::Duration::days(lookback as i64);
+
+        let recent_doses: Vec<_> = dose_logs
+            .iter()
+            .filter(|log| log.timestamp >= cutoff_date)
+            .collect();
+
+        if recent_doses.is_empty() {
+            // No recent usage, skip prediction
+            continue;
+        }
+
+        // Calculate total usage and days span
+        let total_usage: f32 = recent_doses
+            .iter()
+            .filter_map(|log| log.amount_mg)
+            .sum();
+
+        // Find the date range of doses
+        let oldest_dose = recent_doses.iter().map(|log| log.timestamp).min().unwrap();
+        let newest_dose = recent_doses.iter().map(|log| log.timestamp).max().unwrap();
+        let days_span = (newest_dose - oldest_dose).whole_days() + 1; // +1 to include both endpoints
+
+        if days_span <= 0 {
+            continue;
+        }
+
+        let average_daily_usage = total_usage / days_span as f32;
+
+        if average_daily_usage <= 0.0 {
+            continue;
+        }
+
+        // Calculate estimated days remaining
+        let estimated_days_remaining = current_qty / average_daily_usage;
+        let will_run_out_soon = estimated_days_remaining <= threshold as f32;
+
+        predictions.push(InventoryPrediction {
+            inventory_id: item.id.clone(),
+            protocol_id: item.protocol_id.clone(),
+            protocol_name: protocol.name.clone(),
+            peptide_name: protocol.peptide_name.clone(),
+            current_quantity_mg: current_qty,
+            average_daily_usage_mg: average_daily_usage,
+            estimated_days_remaining,
+            will_run_out_soon,
+            threshold_days: threshold,
+        });
+    }
+
+    Ok(predictions)
+}
+
+/// Check inventory levels and create alerts for items running low
+///
+/// Automatically creates LowStock alerts for inventory items predicted to run out
+/// within the threshold period.
+#[tauri::command]
+pub async fn check_inventory_and_create_alerts(
+    state: State<'_, std::sync::Arc<AppState>>,
+    threshold_days: Option<i32>,
+    analysis_days: Option<i32>,
+) -> Result<Vec<Alert>, String> {
+    let threshold = threshold_days.unwrap_or(14);
+
+    info!("Checking inventory and creating alerts (threshold: {} days)", threshold);
+
+    // Get predictions
+    let predictions = predict_inventory_depletion(
+        state.clone(),
+        Some(threshold),
+        analysis_days,
+    )
+    .await?;
+
+    let mut created_alerts = Vec::new();
+
+    for prediction in predictions {
+        if !prediction.will_run_out_soon {
+            continue;
+        }
+
+        // Determine severity based on urgency
+        let severity = if prediction.estimated_days_remaining <= 3.0 {
+            AlertSeverity::Critical
+        } else if prediction.estimated_days_remaining <= 7.0 {
+            AlertSeverity::Warning
+        } else {
+            AlertSeverity::Info
+        };
+
+        let title = format!(
+            "Low Stock: {} ({})",
+            prediction.protocol_name, prediction.peptide_name
+        );
+
+        let message = format!(
+            "Estimated {:.1} days remaining ({:.1}mg left, using ~{:.2}mg/day). Consider reordering soon.",
+            prediction.estimated_days_remaining,
+            prediction.current_quantity_mg,
+            prediction.average_daily_usage_mg
+        );
+
+        let mut alert = Alert::new(AlertType::LowStock, severity, &title, &message);
+        alert.related_id = Some(prediction.inventory_id.clone());
+        alert.related_type = Some("inventory".to_string());
+
+        // Check if similar alert already exists and is not dismissed
+        let existing_alerts = state.storage.list_alerts(false).map_err(|e| {
+            error!("Failed to check existing alerts: {:#}", e);
+            format!("Failed to check existing alerts: {}", e)
+        })?;
+
+        let similar_alert_exists = existing_alerts.iter().any(|a| {
+            a.alert_type == AlertType::LowStock
+                && a.related_id.as_deref() == Some(&prediction.inventory_id)
+                && !a.is_dismissed
+        });
+
+        if !similar_alert_exists {
+            state.storage.create_alert(&alert).map_err(|e| {
+                error!("Failed to create alert: {:#}", e);
+                format!("Failed to create alert: {}", e)
+            })?;
+
+            created_alerts.push(alert);
+            info!("Created low stock alert for: {}", prediction.protocol_name);
+        }
+    }
+
+    info!("Created {} new inventory alerts", created_alerts.len());
+    Ok(created_alerts)
 }
