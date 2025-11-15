@@ -20,7 +20,7 @@ use commands::{
     },
     health::{checkpoint_database, get_database_health, get_database_stats, optimize_database, verify_database_integrity},
     literature::{list_literature, open_external_url, search_cached_literature, search_literature},
-    protocols::{list_protocols, save_protocol, toggle_protocol_favorite},
+    protocols::{add_protocol_tag, list_protocols, remove_protocol_tag, save_protocol, toggle_protocol_favorite, update_protocol_tags},
     restore::{preview_backup, restore_from_backup},
     schedules::{
         create_dose_schedule, delete_dose_schedule, get_pending_dose_reminders,
@@ -121,6 +121,9 @@ pub fn run() {
             list_protocols,
             save_protocol,
             toggle_protocol_favorite,
+            update_protocol_tags,
+            add_protocol_tag,
+            remove_protocol_tag,
             check_ai_availability,
             summarize_text,
             list_literature,

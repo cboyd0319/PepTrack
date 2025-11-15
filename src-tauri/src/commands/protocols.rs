@@ -54,3 +54,42 @@ pub async fn toggle_protocol_favorite(
         .toggle_protocol_favorite(&protocol_id)
         .map_err(|err| err.to_string())
 }
+
+/// Update tags for a protocol
+#[tauri::command]
+pub async fn update_protocol_tags(
+    state: State<'_, std::sync::Arc<AppState>>,
+    protocol_id: String,
+    tags: Vec<String>,
+) -> Result<Vec<String>, String> {
+    state
+        .storage
+        .update_protocol_tags(&protocol_id, tags)
+        .map_err(|err| err.to_string())
+}
+
+/// Add a tag to a protocol
+#[tauri::command]
+pub async fn add_protocol_tag(
+    state: State<'_, std::sync::Arc<AppState>>,
+    protocol_id: String,
+    tag: String,
+) -> Result<Vec<String>, String> {
+    state
+        .storage
+        .add_protocol_tag(&protocol_id, tag)
+        .map_err(|err| err.to_string())
+}
+
+/// Remove a tag from a protocol
+#[tauri::command]
+pub async fn remove_protocol_tag(
+    state: State<'_, std::sync::Arc<AppState>>,
+    protocol_id: String,
+    tag: String,
+) -> Result<Vec<String>, String> {
+    state
+        .storage
+        .remove_protocol_tag(&protocol_id, &tag)
+        .map_err(|err| err.to_string())
+}

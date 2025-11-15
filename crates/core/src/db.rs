@@ -321,6 +321,91 @@ impl StorageManager {
         Ok(protocol.is_favorite)
     }
 
+    /// Update the tags for a protocol
+    ///
+    /// Replaces the entire tags list for a protocol. To add/remove individual tags,
+    /// fetch the protocol, modify the tags Vec, and call this method.
+    ///
+    /// # Arguments
+    /// * `protocol_id` - The ID of the protocol to update
+    /// * `tags` - The new list of tags for the protocol
+    ///
+    /// # Returns
+    /// The updated list of tags
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::db::StorageManager;
+    /// # let storage = todo!();
+    /// let tags = vec!["morning".to_string(), "recovery".to_string()];
+    /// storage.update_protocol_tags("protocol-id", tags)?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn update_protocol_tags(&self, protocol_id: &str, tags: Vec<String>) -> Result<Vec<String>> {
+        let mut protocol = self
+            .get_protocol(protocol_id)?
+            .ok_or_else(|| anyhow::anyhow!("Protocol not found"))?;
+
+        // Update tags and timestamp
+        protocol.tags = tags;
+        protocol.updated_at = now_timestamp();
+
+        // Save to database
+        self.upsert_protocol(&protocol)?;
+
+        Ok(protocol.tags)
+    }
+
+    /// Add a tag to a protocol
+    ///
+    /// Adds a new tag if it doesn't already exist. Tags are case-sensitive.
+    ///
+    /// # Arguments
+    /// * `protocol_id` - The ID of the protocol
+    /// * `tag` - The tag to add
+    ///
+    /// # Returns
+    /// The updated list of tags
+    pub fn add_protocol_tag(&self, protocol_id: &str, tag: String) -> Result<Vec<String>> {
+        let mut protocol = self
+            .get_protocol(protocol_id)?
+            .ok_or_else(|| anyhow::anyhow!("Protocol not found"))?;
+
+        // Add tag if it doesn't exist
+        if !protocol.tags.contains(&tag) {
+            protocol.tags.push(tag);
+            protocol.updated_at = now_timestamp();
+            self.upsert_protocol(&protocol)?;
+        }
+
+        Ok(protocol.tags)
+    }
+
+    /// Remove a tag from a protocol
+    ///
+    /// Removes the specified tag if it exists.
+    ///
+    /// # Arguments
+    /// * `protocol_id` - The ID of the protocol
+    /// * `tag` - The tag to remove
+    ///
+    /// # Returns
+    /// The updated list of tags
+    pub fn remove_protocol_tag(&self, protocol_id: &str, tag: &str) -> Result<Vec<String>> {
+        let mut protocol = self
+            .get_protocol(protocol_id)?
+            .ok_or_else(|| anyhow::anyhow!("Protocol not found"))?;
+
+        // Remove tag if it exists
+        if let Some(pos) = protocol.tags.iter().position(|t| t == tag) {
+            protocol.tags.remove(pos);
+            protocol.updated_at = now_timestamp();
+            self.upsert_protocol(&protocol)?;
+        }
+
+        Ok(protocol.tags)
+    }
+
     /// Perform comprehensive database health check
     ///
     /// Runs PRAGMA quick_check to verify database integrity and collects

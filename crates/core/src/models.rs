@@ -16,6 +16,8 @@ pub struct PeptideProtocol {
     pub updated_at: OffsetDateTime,
     #[serde(default)]
     pub is_favorite: bool,
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 impl PeptideProtocol {
@@ -31,6 +33,7 @@ impl PeptideProtocol {
             created_at: now,
             updated_at: now,
             is_favorite: false,
+            tags: Vec::new(),
         }
     }
 }
