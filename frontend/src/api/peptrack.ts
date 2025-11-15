@@ -151,6 +151,65 @@ export async function bulkDeleteBodyMetrics(metricIds: string[]) {
   return invoke<number>("bulk_delete_body_metrics", { metricIds });
 }
 
+// Side Effects types and functions
+
+export interface SideEffect {
+  id: string;
+  protocol_id?: string | null;
+  dose_log_id?: string | null;
+  date: string; // ISO 8601 string
+  severity: string; // "mild", "moderate", "severe"
+  symptom: string;
+  description?: string | null;
+  duration_minutes?: number | null;
+  resolved: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SideEffectPayload {
+  protocol_id?: string | null;
+  dose_log_id?: string | null;
+  date: string; // ISO 8601 string
+  severity: string;
+  symptom: string;
+  description?: string | null;
+  duration_minutes?: number | null;
+  resolved?: boolean | null;
+}
+
+export async function logSideEffect(payload: SideEffectPayload) {
+  return invoke<SideEffect>("log_side_effect", { payload });
+}
+
+export async function listSideEffects() {
+  return invoke<SideEffect[]>("list_side_effects");
+}
+
+export async function getSideEffect(effectId: string) {
+  return invoke<SideEffect | null>("get_side_effect", { effectId });
+}
+
+export async function listSideEffectsByProtocol(protocolId: string) {
+  return invoke<SideEffect[]>("list_side_effects_by_protocol", { protocolId });
+}
+
+export async function updateSideEffect(effectId: string, payload: SideEffectPayload) {
+  return invoke<SideEffect>("update_side_effect", { effectId, payload });
+}
+
+export async function toggleSideEffectResolved(effectId: string, resolved: boolean) {
+  return invoke<void>("toggle_side_effect_resolved", { effectId, resolved });
+}
+
+export async function deleteSideEffect(effectId: string) {
+  return invoke<void>("delete_side_effect", { effectId });
+}
+
+export async function bulkDeleteSideEffects(effectIds: string[]) {
+  return invoke<number>("bulk_delete_side_effects", { effectIds });
+}
+
 // Database Health types and functions
 
 export interface HealthReport {

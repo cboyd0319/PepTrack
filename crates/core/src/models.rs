@@ -322,6 +322,42 @@ impl BodyMetric {
     }
 }
 
+/// Side Effect Entry
+/// Tracks adverse reactions and side effects from peptides
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SideEffect {
+    pub id: String,
+    pub protocol_id: Option<String>, // Which protocol caused it (if known)
+    pub dose_log_id: Option<String>, // Which specific dose caused it (if known)
+    pub date: OffsetDateTime,
+    pub severity: String, // "mild", "moderate", "severe"
+    pub symptom: String, // e.g., "nausea", "headache", "injection site redness"
+    pub description: Option<String>, // Detailed notes
+    pub duration_minutes: Option<i32>, // How long it lasted
+    pub resolved: bool, // Whether the side effect has resolved
+    pub created_at: OffsetDateTime,
+    pub updated_at: OffsetDateTime,
+}
+
+impl SideEffect {
+    pub fn new<S: Into<String>>(date: OffsetDateTime, severity: S, symptom: S) -> Self {
+        let now = now_timestamp();
+        Self {
+            id: Uuid::new_v4().to_string(),
+            protocol_id: None,
+            dose_log_id: None,
+            date,
+            severity: severity.into(),
+            symptom: symptom.into(),
+            description: None,
+            duration_minutes: None,
+            resolved: false,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+}
+
 /// Database Health Report
 /// Contains information about database integrity and statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -15,6 +15,7 @@ use commands::{
     body_metrics::{bulk_delete_body_metrics, delete_body_metric, get_body_metric, list_body_metrics, log_body_metric, update_body_metric},
     defaults::{get_default_peptides, populate_default_peptides},
     doses::{bulk_delete_doses, delete_dose_log, list_dose_logs, list_dose_logs_for_protocol, log_dose},
+    side_effects::{bulk_delete_side_effects, delete_side_effect, get_side_effect, list_side_effects, list_side_effects_by_protocol, log_side_effect, toggle_side_effect_resolved, update_side_effect},
     drive::{
         check_drive_status, complete_drive_oauth, disconnect_drive, start_drive_oauth,
         upload_to_drive, OAuthState,
@@ -147,6 +148,15 @@ pub fn run() {
             update_body_metric,
             delete_body_metric,
             bulk_delete_body_metrics,
+            // Side effects commands
+            log_side_effect,
+            list_side_effects,
+            get_side_effect,
+            list_side_effects_by_protocol,
+            update_side_effect,
+            toggle_side_effect_resolved,
+            delete_side_effect,
+            bulk_delete_side_effects,
             export_backup_data,
             get_backup_file_path,
             start_drive_oauth,

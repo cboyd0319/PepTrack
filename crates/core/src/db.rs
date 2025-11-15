@@ -3,14 +3,14 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use dirs::data_dir;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use time::OffsetDateTime;
 use tracing::info;
 
 use crate::encryption::{EnvelopeEncryption, KeyProvider};
 use crate::models::{
     Alert, BodyMetric, DatabaseStats, DoseLog, HealthReport, InventoryItem, LiteratureEntry, PeptideProtocol,
-    PriceHistory, Supplier, SummaryHistory,
+    PriceHistory, SideEffect, Supplier, SummaryHistory,
 };
 
 const DEFAULT_DB_NAME: &str = "peptrack.sqlite";
@@ -226,6 +226,25 @@ impl StorageManager {
 
             CREATE INDEX IF NOT EXISTS idx_body_metrics_date
                 ON body_metrics(date DESC);
+
+            CREATE TABLE IF NOT EXISTS side_effects (
+                id TEXT PRIMARY KEY,
+                protocol_id TEXT,
+                dose_log_id TEXT,
+                date TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                payload BLOB NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (protocol_id) REFERENCES protocols(id) ON DELETE SET NULL,
+                FOREIGN KEY (dose_log_id) REFERENCES dose_logs(id) ON DELETE SET NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_side_effects_date
+                ON side_effects(date DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_side_effects_protocol
+                ON side_effects(protocol_id);
             "#,
         )
         .context("Failed to initialize database schema")?;
@@ -1175,6 +1194,217 @@ impl StorageManager {
         tx.commit()?;
 
         Ok(total_deleted)
+    }
+
+    // ===== Side Effects Methods =====
+
+    /// Insert or update a side effect entry
+    ///
+    /// Creates a new side effect or updates an existing one based on the ID.
+    /// All data is encrypted before storage.
+    ///
+    /// # Arguments
+    /// * `side_effect` - The side effect entry to save
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::{StorageManager, SideEffect};
+    /// # use time::OffsetDateTime;
+    /// # let storage = todo!();
+    /// let mut effect = SideEffect::new(OffsetDateTime::now_utc(), "mild", "nausea");
+    /// effect.description = Some("Mild nausea after dose".to_string());
+    /// storage.upsert_side_effect(&effect)?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn upsert_side_effect(&self, side_effect: &SideEffect) -> Result<()> {
+        let conn = self.open_connection()?;
+        let payload = serde_json::to_vec(side_effect).context("Failed to serialize side effect")?;
+        let encrypted = self.encryption.seal(&payload)?;
+
+        conn.execute(
+            r#"INSERT INTO side_effects (id, protocol_id, dose_log_id, date, severity, payload, created_at, updated_at)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+               ON CONFLICT(id) DO UPDATE SET
+                   protocol_id = excluded.protocol_id,
+                   dose_log_id = excluded.dose_log_id,
+                   date = excluded.date,
+                   severity = excluded.severity,
+                   payload = excluded.payload,
+                   updated_at = excluded.updated_at;"#,
+            params![
+                side_effect.id,
+                side_effect.protocol_id,
+                side_effect.dose_log_id,
+                side_effect.date.to_string(),
+                side_effect.severity,
+                encrypted,
+                side_effect.created_at.to_string(),
+                side_effect.updated_at.to_string(),
+            ],
+        )
+        .context("Failed to upsert side effect")?;
+
+        Ok(())
+    }
+
+    /// List all side effects, ordered by date (most recent first)
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use peptrack_core::StorageManager;
+    /// # let storage = todo!();
+    /// let effects = storage.list_side_effects()?;
+    /// for effect in effects {
+    ///     println!("{}: {}", effect.symptom, effect.severity);
+    /// }
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn list_side_effects(&self) -> Result<Vec<SideEffect>> {
+        let conn = self.open_connection()?;
+        let mut stmt = conn
+            .prepare("SELECT payload FROM side_effects ORDER BY date DESC")
+            .context("Failed to prepare side effects query")?;
+
+        let effects = stmt
+            .query_map([], |row| {
+                let blob: Vec<u8> = row.get(0)?;
+                Ok(blob)
+            })?
+            .filter_map(|result| {
+                result.ok().and_then(|blob| {
+                    self.encryption
+                        .open(&blob)
+                        .ok()
+                        .and_then(|decrypted| {
+                            let effect: SideEffect = serde_json::from_slice(&decrypted)
+                                .map_err(|e| {
+                                    tracing::warn!("Failed to deserialize side effect: {}", e);
+                                    e
+                                })
+                                .ok()?;
+                            Some(effect)
+                        })
+                })
+            })
+            .collect();
+
+        Ok(effects)
+    }
+
+    /// Get a specific side effect by ID
+    ///
+    /// # Arguments
+    /// * `effect_id` - The ID of the side effect to retrieve
+    ///
+    /// # Returns
+    /// `Some(SideEffect)` if found, `None` if not found
+    pub fn get_side_effect(&self, effect_id: &str) -> Result<Option<SideEffect>> {
+        let conn = self.open_connection()?;
+        let mut stmt = conn.prepare("SELECT payload FROM side_effects WHERE id = ?1")?;
+
+        let result = stmt.query_row(params![effect_id], |row| {
+            let blob: Vec<u8> = row.get(0)?;
+            Ok(blob)
+        });
+
+        match result {
+            Ok(blob) => {
+                let decrypted = self.encryption.open(&blob)?;
+                let effect: SideEffect = serde_json::from_slice(&decrypted)
+                    .context("Failed to deserialize side effect")?;
+                Ok(Some(effect))
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// List side effects for a specific protocol
+    ///
+    /// # Arguments
+    /// * `protocol_id` - The ID of the protocol to filter by
+    pub fn list_side_effects_by_protocol(&self, protocol_id: &str) -> Result<Vec<SideEffect>> {
+        let conn = self.open_connection()?;
+        let mut stmt = conn
+            .prepare("SELECT payload FROM side_effects WHERE protocol_id = ?1 ORDER BY date DESC")
+            .context("Failed to prepare side effects by protocol query")?;
+
+        let effects = stmt
+            .query_map(params![protocol_id], |row| {
+                let blob: Vec<u8> = row.get(0)?;
+                Ok(blob)
+            })?
+            .filter_map(|result| {
+                result.ok().and_then(|blob| {
+                    self.encryption
+                        .open(&blob)
+                        .ok()
+                        .and_then(|decrypted| serde_json::from_slice(&decrypted).ok())
+                })
+            })
+            .collect();
+
+        Ok(effects)
+    }
+
+    /// Delete a side effect entry
+    ///
+    /// Permanently removes a side effect from the database.
+    ///
+    /// # Arguments
+    /// * `effect_id` - The ID of the side effect to delete
+    pub fn delete_side_effect(&self, effect_id: &str) -> Result<()> {
+        let conn = self.open_connection()?;
+        conn.execute("DELETE FROM side_effects WHERE id = ?1", params![effect_id])
+            .context("Failed to delete side effect")?;
+        Ok(())
+    }
+
+    /// Bulk delete multiple side effects
+    ///
+    /// Deletes multiple side effect entries in a single transaction.
+    ///
+    /// # Arguments
+    /// * `effect_ids` - Slice of side effect IDs to delete
+    ///
+    /// # Returns
+    /// The number of side effects actually deleted
+    pub fn bulk_delete_side_effects(&self, effect_ids: &[String]) -> Result<usize> {
+        if effect_ids.is_empty() {
+            return Ok(0);
+        }
+
+        let conn = self.open_connection()?;
+        let mut total_deleted = 0;
+
+        let tx = conn.unchecked_transaction()?;
+        {
+            let mut stmt = tx.prepare("DELETE FROM side_effects WHERE id = ?1")?;
+            for effect_id in effect_ids {
+                let rows = stmt.execute(params![effect_id])?;
+                total_deleted += rows;
+            }
+        }
+        tx.commit()?;
+
+        Ok(total_deleted)
+    }
+
+    /// Toggle the resolved status of a side effect
+    ///
+    /// # Arguments
+    /// * `effect_id` - The ID of the side effect
+    /// * `resolved` - Whether the side effect is resolved
+    pub fn update_side_effect_resolved(&self, effect_id: &str, resolved: bool) -> Result<()> {
+        let mut effect = self
+            .get_side_effect(effect_id)?
+            .ok_or_else(|| anyhow::anyhow!("Side effect not found"))?;
+
+        effect.resolved = resolved;
+        effect.updated_at = OffsetDateTime::now_utc();
+
+        self.upsert_side_effect(&effect)?;
+        Ok(())
     }
 
     pub fn cache_literature(&self, entry: &LiteratureEntry) -> Result<()> {
