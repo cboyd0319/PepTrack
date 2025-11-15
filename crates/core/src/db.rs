@@ -65,7 +65,8 @@ impl StorageManager {
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 payload BLOB NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                is_favorite INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS dose_logs (
@@ -108,6 +109,9 @@ impl StorageManager {
             CREATE INDEX IF NOT EXISTS idx_price_history_supplier_peptide
                 ON price_history(supplier_id, peptide_name, recorded_at DESC);
 
+            CREATE INDEX IF NOT EXISTS idx_protocols_favorite
+                ON protocols(is_favorite DESC, updated_at DESC);
+
             CREATE TABLE IF NOT EXISTS alerts (
                 id TEXT PRIMARY KEY,
                 alert_type TEXT NOT NULL,
@@ -134,7 +138,34 @@ impl StorageManager {
         )
         .context("Failed to initialize database schema")?;
 
+        // Run migrations for existing databases
+        self.run_migrations(&conn)?;
+
         info!("Database initialized at {}", self.db_path.display());
+        Ok(())
+    }
+
+    /// Run database migrations for schema updates
+    fn run_migrations(&self, conn: &Connection) -> Result<()> {
+        // Migration: Add is_favorite column to protocols table if it doesn't exist
+        let has_favorite_column: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('protocols') WHERE name='is_favorite'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !has_favorite_column {
+            info!("Running migration: Adding is_favorite column to protocols table");
+            conn.execute(
+                "ALTER TABLE protocols ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0",
+                [],
+            )
+            .context("Failed to add is_favorite column")?;
+            info!("Migration completed: is_favorite column added");
+        }
+
         Ok(())
     }
 
@@ -145,18 +176,20 @@ impl StorageManager {
 
         conn.execute(
             r#"
-            INSERT INTO protocols (id, name, payload, updated_at)
-            VALUES (?1, ?2, ?3, ?4)
+            INSERT INTO protocols (id, name, payload, updated_at, is_favorite)
+            VALUES (?1, ?2, ?3, ?4, ?5)
             ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name,
                 payload = excluded.payload,
-                updated_at = excluded.updated_at;
+                updated_at = excluded.updated_at,
+                is_favorite = excluded.is_favorite;
             "#,
             params![
                 protocol.id,
                 protocol.name,
                 encrypted,
-                protocol.updated_at.to_string()
+                protocol.updated_at.to_string(),
+                protocol.is_favorite as i32
             ],
         )
         .context("Failed to upsert protocol")?;
@@ -166,7 +199,7 @@ impl StorageManager {
 
     pub fn list_protocols(&self) -> Result<Vec<PeptideProtocol>> {
         let conn = self.open_connection()?;
-        let mut stmt = conn.prepare("SELECT payload FROM protocols ORDER BY updated_at DESC")?;
+        let mut stmt = conn.prepare("SELECT payload FROM protocols ORDER BY is_favorite DESC, updated_at DESC")?;
         let mut rows = stmt.query([]).context("Unable to run list query")?;
         let mut protocols = Vec::new();
         while let Some(row) = rows.next()? {
@@ -187,6 +220,24 @@ impl StorageManager {
         } else {
             Ok(None)
         }
+    }
+
+    /// Toggle the favorite status of a protocol
+    pub fn toggle_protocol_favorite(&self, protocol_id: &str) -> Result<bool> {
+        let conn = self.open_connection()?;
+
+        // Get current protocol with favorite status
+        let mut protocol = self
+            .get_protocol(protocol_id)?
+            .ok_or_else(|| anyhow::anyhow!("Protocol not found"))?;
+
+        // Toggle favorite status
+        protocol.is_favorite = !protocol.is_favorite;
+
+        // Update the database
+        self.upsert_protocol(&protocol)?;
+
+        Ok(protocol.is_favorite)
     }
 
     /// Get a database connection for advanced operations

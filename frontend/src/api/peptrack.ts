@@ -8,6 +8,7 @@ export interface PeptideProtocol {
   target_concentration_mg_ml?: number | null;
   created_at: string;
   updated_at: string;
+  is_favorite?: boolean;
 }
 
 export interface CreateProtocolPayload {
@@ -36,6 +37,12 @@ export async function saveProtocol(payload: CreateProtocolPayload) {
       notes: payload.notes,
       targetConcentrationMgMl: payload.targetConcentrationMgMl,
     },
+  });
+}
+
+export async function toggleProtocolFavorite(protocolId: string) {
+  return invoke<boolean>("toggle_protocol_favorite", {
+    protocolId,
   });
 }
 

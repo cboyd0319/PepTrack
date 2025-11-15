@@ -14,6 +14,8 @@ pub struct PeptideProtocol {
     pub target_concentration_mg_ml: Option<f32>,
     pub created_at: OffsetDateTime,
     pub updated_at: OffsetDateTime,
+    #[serde(default)]
+    pub is_favorite: bool,
 }
 
 impl PeptideProtocol {
@@ -28,6 +30,7 @@ impl PeptideProtocol {
             target_concentration_mg_ml: None,
             created_at: now,
             updated_at: now,
+            is_favorite: false,
         }
     }
 }

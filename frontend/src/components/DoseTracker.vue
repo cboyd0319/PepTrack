@@ -19,6 +19,34 @@
       </button>
     </div>
 
+    <!-- Duplicate Dose Warning Modal -->
+    <div v-if="showDuplicateWarning" class="modal-overlay" @click="cancelDuplicateDose">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h3>⚠️ Duplicate Dose Detected</h3>
+        </div>
+        <div class="modal-body">
+          <p>
+            You logged a dose for <strong>{{ getDuplicateProtocolName() }}</strong>
+            <strong>{{ getDuplicateTimeAgo() }}</strong> ago.
+          </p>
+          <p class="warning-text">
+            Last dose: <strong>{{ duplicateInfo.lastAmount }} mg</strong>
+            at {{ formatDate(duplicateInfo.lastTime) }}
+          </p>
+          <p>Are you sure you want to log another dose so soon?</p>
+        </div>
+        <div class="modal-footer">
+          <button @click="cancelDuplicateDose" class="btn-secondary">
+            ❌ Cancel
+          </button>
+          <button @click="confirmDuplicateDose" class="btn-primary">
+            ✅ Yes, Log Dose
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Log Dose Tab -->
     <div v-show="activeTab === 'log'" class="tab-content">
       <!-- Log New Dose Form -->
@@ -36,6 +64,7 @@
           <select
             id="dose-protocol-select"
             v-model="form.protocolId"
+            @change="onProtocolChange"
             required
             aria-label="Select peptide protocol"
             :disabled="!hasProtocols"
@@ -46,6 +75,28 @@
             </option>
           </select>
         </label>
+
+        <!-- Recent Doses Preview -->
+        <div v-if="recentProtocolDoses.length > 0" class="recent-doses-preview">
+          <div class="recent-doses-header">
+            <span class="recent-doses-label">📊 Recent doses for this protocol:</span>
+            <button
+              type="button"
+              @click="useLastDoseAsTemplate"
+              class="use-last-btn"
+              title="Fill form with last dose details"
+            >
+              ↻ Use Last Dose
+            </button>
+          </div>
+          <div class="recent-doses-list">
+            <div v-for="(dose, index) in recentProtocolDoses.slice(0, 3)" :key="dose.id" class="recent-dose-item">
+              <span class="recent-dose-amount">{{ dose.amount_mg }} mg</span>
+              <span class="recent-dose-site">@ {{ dose.site }}</span>
+              <span class="recent-dose-time">{{ formatDate(dose.logged_at) }}</span>
+            </div>
+          </div>
+        </div>
 
         <div class="form-row">
           <label for="dose-amount-input">
@@ -74,7 +125,18 @@
             required
             aria-label="Injection site location"
             autocomplete="off"
+            list="injection-sites"
           />
+          <datalist id="injection-sites">
+            <option value="Left Abdomen">
+            <option value="Right Abdomen">
+            <option value="Left Thigh">
+            <option value="Right Thigh">
+            <option value="Left Deltoid">
+            <option value="Right Deltoid">
+            <option value="Left Glute">
+            <option value="Right Glute">
+          </datalist>
         </div>
 
         <label for="dose-notes-input">
@@ -207,12 +269,35 @@ const error = ref<string | null>(null);
 const successMessage = ref<string | null>(null);
 const hasProtocols = computed(() => protocols.value.length > 0);
 
+// Duplicate detection state
+const showDuplicateWarning = ref(false);
+const duplicateInfo = ref<{
+  lastTime: string;
+  lastAmount: number;
+  protocolId: string;
+}>({
+  lastTime: '',
+  lastAmount: 0,
+  protocolId: '',
+});
+const DUPLICATE_THRESHOLD_HOURS = 2; // Configurable threshold
+
 // Form state
 const form = ref<LogDosePayload>({
   protocolId: '',
   site: '',
   amountMg: 0,
   notes: '',
+});
+
+// Computed: Recent doses for selected protocol
+const recentProtocolDoses = computed(() => {
+  if (!form.value.protocolId) return [];
+
+  return doses.value
+    .filter(d => d.protocol_id === form.value.protocolId)
+    .sort((a, b) => new Date(b.logged_at).getTime() - new Date(a.logged_at).getTime())
+    .slice(0, 5); // Get last 5 doses
 });
 
 onMounted(async () => {
@@ -241,12 +326,143 @@ async function loadDoses() {
   }
 }
 
+/**
+ * Handle protocol selection change - auto-fill with smart defaults
+ */
+function onProtocolChange() {
+  if (!form.value.protocolId) return;
+
+  // Auto-fill with last dose details for this protocol
+  const lastDose = recentProtocolDoses.value[0];
+  if (lastDose) {
+    // Only auto-fill if the fields are currently empty
+    if (!form.value.site) {
+      form.value.site = lastDose.site;
+    }
+    if (form.value.amountMg === 0 || !form.value.amountMg) {
+      form.value.amountMg = lastDose.amount_mg;
+    }
+  }
+}
+
+/**
+ * Use last dose as template - fill all fields
+ */
+function useLastDoseAsTemplate() {
+  const lastDose = recentProtocolDoses.value[0];
+  if (!lastDose) return;
+
+  form.value.site = lastDose.site;
+  form.value.amountMg = lastDose.amount_mg;
+  // Don't copy notes, as they're usually specific to that dose
+}
+
+/**
+ * Check if a dose for the same protocol was logged recently
+ */
+function checkForDuplicateDose(): boolean {
+  if (!form.value.protocolId) return false;
+
+  // Get all doses for this protocol
+  const protocolDoses = doses.value.filter(d => d.protocol_id === form.value.protocolId);
+
+  if (protocolDoses.length === 0) return false;
+
+  // Sort by date (most recent first)
+  const sortedDoses = protocolDoses.sort(
+    (a, b) => new Date(b.logged_at).getTime() - new Date(a.logged_at).getTime()
+  );
+
+  const lastDose = sortedDoses[0];
+  const lastDoseTime = new Date(lastDose.logged_at);
+  const now = new Date();
+  const hoursSinceLastDose = (now.getTime() - lastDoseTime.getTime()) / (1000 * 60 * 60);
+
+  // Check if within threshold
+  if (hoursSinceLastDose < DUPLICATE_THRESHOLD_HOURS) {
+    duplicateInfo.value = {
+      lastTime: lastDose.logged_at,
+      lastAmount: lastDose.amount_mg,
+      protocolId: lastDose.protocol_id,
+    };
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Get protocol name for duplicate warning
+ */
+function getDuplicateProtocolName(): string {
+  return getProtocolName(duplicateInfo.value.protocolId);
+}
+
+/**
+ * Get human-readable time since last dose
+ */
+function getDuplicateTimeAgo(): string {
+  const lastDoseTime = new Date(duplicateInfo.value.lastTime);
+  const now = new Date();
+  const minutesAgo = Math.floor((now.getTime() - lastDoseTime.getTime()) / (1000 * 60));
+
+  if (minutesAgo < 60) {
+    return `${minutesAgo} minute${minutesAgo !== 1 ? 's' : ''}`;
+  }
+
+  const hoursAgo = Math.floor(minutesAgo / 60);
+  const remainingMinutes = minutesAgo % 60;
+
+  if (remainingMinutes === 0) {
+    return `${hoursAgo} hour${hoursAgo !== 1 ? 's' : ''}`;
+  }
+
+  return `${hoursAgo}h ${remainingMinutes}m`;
+}
+
+/**
+ * Cancel duplicate dose - close modal
+ */
+function cancelDuplicateDose() {
+  showDuplicateWarning.value = false;
+  duplicateInfo.value = {
+    lastTime: '',
+    lastAmount: 0,
+    protocolId: '',
+  };
+}
+
+/**
+ * Confirm duplicate dose - proceed with logging
+ */
+async function confirmDuplicateDose() {
+  showDuplicateWarning.value = false;
+  await performLogDose(true); // true = skip duplicate check
+}
+
+/**
+ * Handle log dose - with duplicate detection
+ */
 async function handleLogDose() {
   if (!form.value.protocolId || !form.value.site || form.value.amountMg <= 0 || isNaN(form.value.amountMg)) {
     error.value = 'Please fill in all required fields with valid values.';
     return;
   }
 
+  // Check for duplicate
+  if (checkForDuplicateDose()) {
+    showDuplicateWarning.value = true;
+    return;
+  }
+
+  // No duplicate detected, proceed
+  await performLogDose(false);
+}
+
+/**
+ * Actually log the dose to the database
+ */
+async function performLogDose(skipDuplicateCheck: boolean) {
   isLogging.value = true;
   error.value = null;
   successMessage.value = null;
@@ -410,6 +626,76 @@ h2 {
   border: 1px solid #ddd;
   border-radius: 6px;
   font-size: 14px;
+}
+
+/* Recent Doses Preview */
+.recent-doses-preview {
+  background: #e8f5e9;
+  border: 1px solid #a5d6a7;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 10px 0;
+}
+
+.recent-doses-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.recent-doses-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2e7d32;
+}
+
+.use-last-btn {
+  padding: 6px 12px;
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.use-last-btn:hover {
+  background: #388e3c;
+}
+
+.recent-doses-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recent-dose-item {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+  padding: 6px 10px;
+  background: white;
+  border-radius: 4px;
+}
+
+.recent-dose-amount {
+  font-weight: 700;
+  color: #1976d2;
+  min-width: 60px;
+}
+
+.recent-dose-site {
+  color: #666;
+  flex: 1;
+}
+
+.recent-dose-time {
+  color: #999;
+  font-size: 12px;
 }
 
 .form-row {
@@ -593,6 +879,112 @@ h2 {
   line-height: 1.5;
 }
 
+/* Duplicate Warning Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  padding: 0;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-header {
+  padding: 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #e67e22;
+  font-size: 20px;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-body p {
+  margin: 10px 0;
+  color: #2c3e50;
+  line-height: 1.6;
+}
+
+.warning-text {
+  background: #fff3cd;
+  padding: 12px;
+  border-radius: 6px;
+  border-left: 4px solid #f1c40f;
+  color: #856404;
+  font-size: 14px;
+}
+
+.modal-footer {
+  padding: 15px 20px;
+  border-top: 1px solid #eee;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.btn-secondary {
+  padding: 10px 20px;
+  background: #95a5a6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.btn-secondary:hover {
+  background: #7f8c8d;
+}
+
+.btn-primary {
+  padding: 10px 20px;
+  background: #e67e22;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.btn-primary:hover {
+  background: #d35400;
+}
+
 @media (max-width: 768px) {
   .form-row {
     grid-template-columns: 1fr;
@@ -610,6 +1002,20 @@ h2 {
   }
 
   .history-controls select {
+    width: 100%;
+  }
+
+  .modal-content {
+    width: 95%;
+    margin: 10px;
+  }
+
+  .modal-footer {
+    flex-direction: column;
+  }
+
+  .btn-secondary,
+  .btn-primary {
     width: 100%;
   }
 }

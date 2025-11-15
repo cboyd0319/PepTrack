@@ -42,3 +42,15 @@ pub async fn save_protocol(
 
     Ok(protocol)
 }
+
+/// Toggle the favorite status of a protocol
+#[tauri::command]
+pub async fn toggle_protocol_favorite(
+    state: State<'_, std::sync::Arc<AppState>>,
+    protocol_id: String,
+) -> Result<bool, String> {
+    state
+        .storage
+        .toggle_protocol_favorite(&protocol_id)
+        .map_err(|err| err.to_string())
+}

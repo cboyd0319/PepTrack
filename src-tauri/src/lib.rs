@@ -19,7 +19,7 @@ use commands::{
         upload_to_drive, OAuthState,
     },
     literature::{list_literature, open_external_url, search_cached_literature, search_literature},
-    protocols::{list_protocols, save_protocol},
+    protocols::{list_protocols, save_protocol, toggle_protocol_favorite},
     restore::{preview_backup, restore_from_backup},
     schedules::{
         create_dose_schedule, delete_dose_schedule, get_pending_dose_reminders,
@@ -94,6 +94,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_protocols,
             save_protocol,
+            toggle_protocol_favorite,
             check_ai_availability,
             summarize_text,
             list_literature,
